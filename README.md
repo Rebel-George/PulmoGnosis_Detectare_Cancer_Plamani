@@ -42,7 +42,6 @@ Medicul selectează pacientul din sistemul PACS. Aplicația extrage automat fiș
 ### Pasul 2: Vizualizarea 3D Suprapusă (CT + PET Fusion)
 Înainte de a afișa rezultatele AI-ului, aplicația prezintă medicului o randare 3D a tumorii decupate. Aici, structura gri, anatomică a plămânului (din CT) este **suprapusă cu o hartă de culori termale (din PET)**. Această vizualizare fuzionată permite medicului să confirme vizual că AI-ul a identificat corect centrul de greutate metabolic al tumorii și limitele ei fizice.
 
-*[Aici poți adăuga un screenshot din interfața aplicației tale cu vizualizarea 3D]*
 
 ### Pasul 3: Tabloul de Bord Predictiv (Rezultatele)
 Sub vizualizarea 3D, interfața afișează panoul de ieșire generat de rețeaua neurală (Late-Fusion). Medicul va vedea un card clar:
