@@ -77,18 +77,46 @@ recitirea descrierii plastice și formale (există deja).
 - [ ] aplicația rulează local cu un pacient de test, de la încărcare până la panoul de rezultate;
 - [ ] raportul conține funcționalitățile, problema (plastic + formal), *related work* cu referințe reale, instrumentele.
 
-### Etapa 2 → Lab 3 (S2–S3) — 10 puncte
+### Etapa 2 → Lab 3 (S2–S3, 2–15 nov.) — 10 puncte
 
-| Săpt. | R1 | R2 | R3 |
+**Ideea:** trei modele reale antrenate pe date puține, iar unul dintre ele integrat în aplicație — prima
+predicție reală afișată, alături de valorile *placeholder* marcate ca atare.
+
+| # | Algoritm | Date („small data") | Prezice | De ce |
+|---|---|---|---|---|
+| **A** | **Regresie logistică** pe vârstă, gen, fumat | Tabelul clinic NSCLC-Radiogenomics, 211 pacienți — **fără imagini, poate începe din prima zi** | EGFR, KRAS | Baseline-ul pe care orice model ulterior trebuie să-l bată; primul model real **în aplicație** |
+| **B** | **CNN 2D** (ResNet-18 pre-antrenat pe ImageNet, ajustat fin) | Kaggle, ~1000 de imagini 2D | Histologie (3 tipuri + normal) | Model rapid pe imagini; limitările setului (fără ID de pacient, risc de *leakage*) se documentează explicit |
+| **C** | **3D ResNet-18** (greutăți MedicalNet) pe cubul CT+PET de 128³ la 0,75 mm | **~40 de pacienți** NSCLC-Radiogenomics, cubul centrat pe masca tumorală oficială (SEG) | Adenocarcinom vs. scuamos | Prima versiune a modelului nostru din Etapa 2 |
+
+**Datele disponibile (numărate din metadate):** 144 de pacienți au CT + PET + mască tumorală
+(112 adenocarcinom, 29 scuamos; 23 EGFR mutant din 117 cunoscuți). Lotul de ~40 se alege stratificat
+după histologie. **Disc:** ~450 MB/pacient (CT + PET) ⇒ ~18 GB pentru 40 de pacienți, față de ~29 GB liberi
+⇒ descărcare în **loturi de câte 10**, se păstrează doar cuburile (~8 MB/pacient, `float16`), iar DICOM-urile
+brute se șterg după procesare.
+
+| Zile | R1 — Date | R2 — Modele și evaluare | R3 — Aplicație |
 |---|---|---|---|
-| **S2** | Descărcarea lotului 1 NSCLC-Radiogenomics (~30 pacienți: CT + PET + SEG). Conversie HU/SUV cu teste unitare | **Regresie logistică clinică** (vârstă, gen, fumat → EGFR/KRAS) pe toți cei 211 pacienți — nu are nevoie de imagini. Cadrul de evaluare: fold-uri stratificate la nivel de pacient, AUC + bootstrap | **CNN 2D pe Kaggle** (histologie, *small data*), cu limitările documentate. Descărcarea unui subset LIDC (~100 pacienți) |
-| **S3** | Co-registrare CT–PET, extragerea cubului 128³ (0,75 mm) pentru lotul 1. Notebook de verificare vizuală | **Primul model 3D** (3D ResNet-18, doar CT, histologie) pe lotul mic → rezultate „small data" | Măști 3D din contururile LIDC (`pylidc`); primul U-Net de test (verifică memoria GPU) |
+| **1–2** | `scripts/build_cohort.py`: tabel pacient × (CT, PET, SEG, histologie, EGFR, KRAS, vârstă, gen, fumat); alegerea celor ~40 de pacienți | **Modelul A** + cadrul comun de evaluare: validare încrucișată în 5 fold-uri, stratificată la nivel de pacient (generată o singură dată), AUC cu interval de încredere bootstrap | Instalarea PyTorch (CUDA) și MONAI; descărcarea setului Kaggle |
+| **3–5** | Descărcare selectivă cu `idc-index` (loturi de 10); citirea măștii **DICOM SEG**; centrul tumorii → cub 128³ → salvat ca `.npz` în `data/processed/` | Script de evaluare comun, folosit de toate modelele (aceleași fold-uri, aceleași metrici) | **Modelul B** (CNN 2D pe Kaggle) |
+| **6–8** | Notebook de verificare vizuală: cubul conține tumora la fiecare pacient | **Modelul C**: întâi doar CT, apoi CT+PET; precizie mixtă, batch 4 | **Modelul A în aplicație**: EGFR/KRAS reale din datele clinice, etichetate „model clinic, antrenat pe 211 pacienți"; histologia rămâne *placeholder* marcat |
+| **9–10** | Raport: subsetul de date și preprocesarea | Raport: tabelul de rezultate (cu IÎ 95%, nr. pacienți și pozitivi) și discuția | Raport: descrierea algoritmilor A, B, C + capturi de ecran; *tag* git `etapa-2` |
 
-**Raport:** descrierea algoritmului (CNN 2D, ResNet 3D, regresie logistică), metodologia, rezultatele pe date puține.
+**În paralel, dacă rămâne timp (pregătire pentru Etapa 4):** subset LIDC-IDRI (~100 pacienți), măști 3D cu
+`pylidc` și un prim U-Net de test pentru a verifica memoria GPU.
+
+**De pregătit / aprobat înainte de start:**
+- descărcări: ~18 GB de scanări (pe loturi), greutățile MedicalNet (~100–200 MB), PyTorch cu CUDA (~2,5 GB);
+- un cont Kaggle (sau descărcarea manuală a setului) pentru modelul B.
+
+**Așteptări realiste:** cu ~40 de pacienți, modelul C va avea probabil performanță modestă și intervale de
+încredere largi — normal pentru „small data". Comparația importantă este dacă modelul pe imagini bate
+baseline-ul clinic; Etapa 3 (toți cei 144+ pacienți) și Etapa 4 (îmbunătățiri) pornesc de aici.
 
 **Gata când:**
-- [ ] cel puțin un algoritm inteligent antrenat și evaluat, cu rezultate reale pe date puține;
-- [ ] raportul descrie algoritmul, metodologia și rezultatele.
+- [ ] 3 modele antrenate, cu rezultate reale (IÎ 95%, numărul de pacienți și de cazuri pozitive);
+- [ ] aplicația afișează predicția reală a modelului A, alături de valorile *placeholder* marcate;
+- [ ] raportul descrie algoritmii, metodologia (date, fold-uri, metrici) și rezultatele;
+- [ ] versiunea prezentată e înghețată cu *tag*-ul `etapa-2`.
 
 ### Etapa 3 → Lab 4 (S4–S5) — 10 puncte
 
