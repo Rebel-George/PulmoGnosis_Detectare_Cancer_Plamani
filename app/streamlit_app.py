@@ -151,7 +151,9 @@ def step_upload() -> None:
     col1, col2 = st.columns(2)
     default_ct = pick_series(series, "CT")
     ct = col1.selectbox("Seria CT", ct_options, index=ct_options.index(default_ct), format_func=label)
-    pet = col2.selectbox("Seria PET (opțional)", [None, *pet_options], index=1 if pet_options else 0,
+    default_pet = pick_series(series, "PT")
+    pet = col2.selectbox("Seria PET (opțional)", [None, *pet_options],
+                         index=pet_options.index(default_pet) + 1 if default_pet else 0,
                          format_func=lambda s: "fără PET" if s is None else label(s))
 
     if st.button("Pregătește cazul", type="primary"):

@@ -52,10 +52,22 @@ def scan_folder(root: str | Path) -> list[SeriesInfo]:
     )
 
 
+def is_uncorrected_pet(info: SeriesInfo) -> bool:
+    """PET reconstructed without attenuation correction (e.g. 'PET_BODY_NO_AC'): not usable for SUV."""
+    desc = info.description.upper().replace("-", "_").replace(" ", "_")
+    return info.modality == "PT" and any(tag in desc for tag in ("NO_AC", "NOAC", "NAC", "NON_AC", "UNCORRECTED"))
+
+
 def pick_series(series: list[SeriesInfo], modality: str) -> SeriesInfo | None:
-    """Return the series of the given modality with the most slices."""
+    """Return the series of the given modality with the most slices.
+
+    For PET, attenuation-corrected series are preferred over uncorrected ones,
+    even when the uncorrected series has more slices.
+    """
     candidates = [s for s in series if s.modality == modality]
-    return max(candidates, key=lambda s: s.num_slices) if candidates else None
+    if not candidates:
+        return None
+    return max(candidates, key=lambda s: (not is_uncorrected_pet(s), s.num_slices))
 
 
 def _sorted_by_position(files: list[Path]) -> list[Path]:
