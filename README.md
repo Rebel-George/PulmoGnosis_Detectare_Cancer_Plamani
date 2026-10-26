@@ -274,6 +274,37 @@ PulmoGnosis/
 
 ---
 
+## 🚀 Instalare și rulare
+
+Necesită Python 3.12. Din rădăcina repository-ului:
+
+```bash
+py -3.12 -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt -e .
+```
+
+Pornirea aplicației demo (se deschide în browser la `http://localhost:8501`):
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+Pentru o primă încercare, alegeți **„Caz demonstrativ (fantomă sintetică)"** la pasul 1: un CT + PET
+generat artificial (plămâni, coloană, inimă și o tumoră în plămânul drept), fără date reale de pacient.
+
+Rularea testelor:
+
+```bash
+pytest
+```
+
+> În Etapa 1 a proiectului, aplicația are flow-ul complet, dar **fără model antrenat**: localizarea
+> folosește punctul cu SUV maxim, iar panoul de rezultate afișează prevalențele din seturile de date,
+> marcate vizibil ca „DEMO".
+
+---
+
 ## ⚠️ 9. Limitări și direcții viitoare
 
 - **Date puține pentru mutații** (~170 pacienți, ~40 pozitivi per mutație): rezultatele vor avea

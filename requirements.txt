@@ -1,0 +1,16 @@
+# Core
+numpy>=1.26,<3
+scipy>=1.11
+pandas>=2.2
+openpyxl>=3.1
+
+# Medical imaging
+pydicom>=2.4
+SimpleITK>=2.3
+
+# App
+streamlit>=1.38
+matplotlib>=3.8
+
+# Dev
+pytest>=8.0

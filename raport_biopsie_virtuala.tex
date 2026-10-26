@@ -45,6 +45,52 @@ Propunerea inițială urmărea predicția a cinci biomarkeri (EGFR, KRAS, ALK, R
 
 Noul design răspunde acestor limitări prin: (a) separarea localizării tumorii (Etapa 1), antrenată pe setul mare LIDC-IDRI, de clasificare (Etapa 2), care primește doar regiunea tumorală; (b) folosirea unei rețele mai mici, pre-antrenate (3D ResNet-18); (c) adăugarea histologiei ca sarcină auxiliară, pentru care există aproximativ 560 de pacienți etichetați (Lung-PET-CT-Dx \cite{li2020} și NSCLC-Radiogenomics); (d) validare încrucișată în locul unei singure împărțiri fixe. Setul Kaggle este păstrat doar ca baseline 2D de comparație.
 
+\section{Funcționalitățile aplicației}
+
+\subsection{Utilizatori și scop}
+Aplicația PulmoGnosis se adresează medicilor radiologi și oncologi care evaluează pacienți cu suspiciune de cancer pulmonar fără celule mici. Scopul ei este să ofere, înainte de rezultatul biopsiei, o estimare a tipului histologic al tumorii și a probabilității mutațiilor EGFR și KRAS, împreună cu vizualizarea regiunii pe care s-a bazat estimarea. Aplicația este un instrument de suport al deciziei, nu un dispozitiv de diagnostic: rezultatele trebuie confirmate prin biopsie și testare moleculară.
+
+\subsection{Fluxul aplicației}
+Aplicația ghidează utilizatorul printr-un flux în cinci pași:
+
+\begin{enumerate}
+    \item \textbf{Încărcarea scanărilor.} Utilizatorul selectează un folder local sau o arhivă ZIP cu fișiere DICOM (sau un caz demonstrativ sintetic). Aplicația identifică automat seriile disponibile (CT, PET), le afișează într-un tabel și propune seria CT și seria PET potrivite. La confirmare, rulează preprocesarea (Etapa 0): conversia CT în unități Hounsfield, conversia PET în SUV pe baza dozei injectate și a greutății pacientului, re-eșantionarea la voxeli de 1~mm și alinierea PET-ului pe CT.
+    \item \textbf{Vizualizarea CT + PET.} Volumul poate fi parcurs secțiune cu secțiune în planurile axial, coronal și sagital, cu ferestre CT predefinite (plămân, mediastin). Harta PET este suprapusă peste CT cu opacitate și interval SUV reglabile, pentru a evidenția zonele cu activitate metabolică crescută.
+    \item \textbf{Date clinice.} Utilizatorul completează vârsta, genul și statutul de fumător; vârsta și genul sunt pre-completate din antetul DICOM când sunt disponibile.
+    \item \textbf{Localizarea tumorii.} Aplicația propune centrul tumorii și afișează, în cele trei planuri, regiunea cubică de $64^3$ voxeli care va fi trimisă clasificatorului. Utilizatorul poate corecta manual poziția. În versiunea finală, propunerea este făcută de modelul de segmentare 3D U-Net (Etapa 1 a pipeline-ului).
+    \item \textbf{Rezultate.} Un panou afișează probabilitățile pentru tipul histologic (adenocarcinom, carcinom scuamos, carcinom cu celule mici) și pentru mutațiile EGFR și KRAS, datele folosite și, în versiunea finală, harta Grad-CAM care arată regiunile care au influențat predicția.
+\end{enumerate}
+
+\subsection{Starea funcționalităților}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{4.2cm}p{7.2cm}p{3.2cm}@{}}
+\toprule
+\textbf{Funcționalitate} & \textbf{Descriere} & \textbf{Stare} \\ \midrule
+Încărcare DICOM & Folder local, arhivă ZIP, caz demonstrativ; detectarea automată a seriilor & Implementat \\
+Preprocesare (Etapa 0) & HU, SUV, re-eșantionare 1~mm, aliniere PET--CT & Implementat, cu teste unitare \\
+Vizualizare CT + PET & Trei planuri, ferestre CT, suprapunere PET reglabilă & Implementat \\
+Date clinice & Formular cu pre-completare din DICOM & Implementat \\
+Localizarea tumorii & Propunere automată + corecție manuală, previzualizarea regiunii decupate & Euristică temporară (maximul SUV); 3D U-Net planificat \\
+Predicție histologie, EGFR, KRAS & Panou de rezultate & Interfață implementată; valori de referință (prevalența din seturile de date) până la antrenarea modelului \\
+Hartă Grad-CAM & Explicarea vizuală a predicției & Planificat \\ \bottomrule
+\end{tabular}
+\caption{Funcționalitățile aplicației și stadiul lor de implementare.}
+\end{table}
+
+Pentru a evita orice confuzie, cât timp modelul nu este antrenat, panoul de rezultate afișează un avertisment vizibil (\textit{„DEMO -- fără model antrenat''}), iar valorile prezentate sunt prevalențele etichetelor din seturile de date, identice pentru toți pacienții.
+
+\todo{Adăugați capturi de ecran ale celor cinci pași ai aplicației (din cazul demonstrativ).}
+
+\subsection{Cerințe non-funcționale}
+\begin{itemize}
+    \item \textbf{Confidențialitate:} toate datele sunt procesate local; imaginile pacienților nu sunt trimise către servicii externe.
+    \item \textbf{Resurse:} aplicația trebuie să ruleze pe un laptop obișnuit (ținta: un GPU de 6~GB), iar inferența modelelor trebuie să dureze sub un minut pentru un pacient.
+    \item \textbf{Transparență:} fiecare rezultat este însoțit de datele de intrare folosite, de regiunea analizată și de mențiunea că nu înlocuiește biopsia.
+\end{itemize}
+
 \section{Problema științifică abordată}
 
 \subsection{Descrierea problemei științifice}
@@ -101,6 +147,35 @@ $\downarrow$\\
 
     \item \textbf{Detecția și segmentarea nodulilor pe LIDC-IDRI / LUNA16:} \todo{lucrare reală}
 \end{itemize}
+
+\section{Instrumente și tehnologii utile}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}p{3.3cm}p{4.2cm}p{7.1cm}@{}}
+\toprule
+\textbf{Categorie} & \textbf{Instrument} & \textbf{Rol în proiect} \\ \midrule
+Limbaj & Python 3.12 & Limbajul întregului proiect; ecosistem matur pentru imagistică medicală și învățare automată \\
+Fișiere DICOM & pydicom & Citirea antetelor DICOM: modalitate, poziția secțiunilor, doza injectată și greutatea (pentru SUV) \\
+Procesare de imagini 3D & SimpleITK & Citirea seriilor ca volume 3D cu geometria fizică (spațiere, origine, orientare), re-eșantionare, alinierea PET pe CT \\
+Calcul numeric & NumPy, SciPy & Operații pe volume, filtrare, decuparea regiunilor \\
+Deep learning & PyTorch & Antrenarea rețelelor 3D (ResNet-18, U-Net) \\
+Deep learning medical & MONAI & Arhitecturi, transformări și augmentări 3D specifice imagisticii medicale \\
+Segmentare & nnU-Net \cite{isensee2021} & Configurarea automată a unui U-Net 3D, ca referință puternică pentru Etapa 1 \\
+Pre-antrenare & MedicalNet \cite{chen2019} & Greutăți ResNet 3D pre-antrenate pe imagini medicale \\
+Adnotări LIDC-IDRI & pylidc \cite{hancock2016} & Extragerea contururilor nodulilor desenate de radiologi \\
+Radiomică & PyRadiomics & Trăsături clasice de formă și textură pentru baseline-ul radiomic \\
+Învățare automată clasică și statistică & scikit-learn, pandas & Regresie logistică, validare încrucișată, bootstrap, tabele de cohortă \\
+Interfață & Streamlit, Matplotlib & Aplicația demonstrativă și vizualizarea secțiunilor CT/PET \\
+Testare & pytest & Teste unitare pentru conversiile HU/SUV, geometrie și pipeline-ul de preprocesare \\
+Urmărirea experimentelor & Weights \& Biases sau MLflow & Istoricul rulărilor, configurațiilor și metricilor, comun echipei \\
+Acces la date & TCIA, NCI Imaging Data Commons (\texttt{idc-index}) & Descărcarea selectivă a seriilor necesare din seturile publice \\
+Colaborare & Git, GitHub & Versionarea codului și a raportului, revizuirea codului între colegi \\
+Resurse de calcul & GPU local (6~GB), Google Colab / Kaggle & Antrenare locală; GPU în cloud pentru modelele mai mari \\ \bottomrule
+\end{tabular}
+\caption{Instrumentele și tehnologiile folosite.}
+\end{table}
 
 \section{Metode efectiv folosite pentru rezolvarea problemei}
 

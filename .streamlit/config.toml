@@ -1,0 +1,6 @@
+[server]
+# CT series are often a few hundred MB.
+maxUploadSize = 2048
+
+[browser]
+gatherUsageStats = false
