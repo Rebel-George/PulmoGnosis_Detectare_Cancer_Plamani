@@ -5,13 +5,14 @@
 \babelprovide[import, onchar=ids fonts]{romanian}
 \babelfont{rm}{Noto Sans}
 \usepackage{amsmath}
+\usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{xcolor}
 \usepackage{hyperref}
 
 \newcommand{\todo}[1]{\textcolor{red}{\textbf{TODO:} #1}}
 
-\title{\textbf{Biopsia Virtuală pentru Cancerul Pulmonar: Predicția Biomarkerilor Tumorali folosind Învățarea Multimodală (Late-Fusion)}}
+\title{\textbf{PulmoGnosis -- Biopsia Virtuală pentru Cancerul Pulmonar: Localizarea Tumorii și Predicția Histologiei și a Mutațiilor EGFR/KRAS printr-un Pipeline Multimodal în Două Etape}}
 \author{Raport de Proiect}
 \date{}
 
@@ -22,135 +23,303 @@
 \section{Introducere}
 
 \subsection{Ideea de bază a proiectului}
-Proiectul vizează dezvoltarea unui sistem inteligent de tip CDSS (Clinical Decision Support System) pentru diagnosticarea avansată a cancerului pulmonar (Non-Small Cell Lung Cancer - NSCLC). Ideea centrală este crearea unei \textit{„biopsii virtuale”} capabile să prezică profilul molecular al tumorii (biomarkeri precum EGFR, KRAS, ALK și expresia PD-L1) analizând exclusiv scanări imagistice non-invazive (CT și PET) și date demografice de bază (Vârstă, Gen). 
+Proiectul vizează dezvoltarea unui sistem inteligent de tip CDSS (\textit{Clinical Decision Support System}) pentru cancerul pulmonar fără celule mici (\textit{Non-Small Cell Lung Cancer} -- NSCLC). Ideea centrală este o \textit{„biopsie virtuală''}: estimarea non-invazivă a biologiei tumorii pornind de la imagistica CT și PET și de la câteva date clinice de bază (vârstă, gen, statut de fumător).
+
+Sistemul este organizat ca un pipeline în două etape: (1) localizarea și segmentarea automată a tumorii în volumul CT 3D și (2) predicția, pe regiunea tumorală decupată, a tipului histologic (adenocarcinom, carcinom scuamos, carcinom cu celule mici) și a probabilității mutațiilor EGFR și KRAS.
 
 \subsection{Motivație}
-Deși cancerul pulmonar este recunoscut ca fiind cel mai mortal tip de cancer, un prognostic bun depinde de tratamentul țintit timpuriu. În prezent, determinarea profilului molecular necesită o biopsie fizică invazivă, care prezintă riscuri majore (ex. pneumotorax), introduce întârzieri de câteva săptămâni în fluxul de tratament și poate rata mutațiile specifice din cauza eterogenității tumorale (acul extrage o probă dintr-o zonă nereprezentativă). 
+Cancerul pulmonar este cauza principală de deces prin cancer, iar alegerea tratamentului depinde tot mai mult de profilul molecular al tumorii. Pacienții cu mutații EGFR pot beneficia de inhibitori de tirozin-kinază, iar cei cu anumite mutații KRAS de inhibitori dedicați. În prezent, aceste informații se obțin prin biopsie și testare moleculară, proceduri invazive (cu riscuri precum pneumotoraxul), care pot dura săptămâni și pot rata mutațiile din cauza eterogenității tumorale (proba extrasă poate să nu fie reprezentativă pentru întreaga tumoră).
 
-Necesitatea unui algoritm inteligent derivă din faptul că ochiul uman (chiar și al unui radiolog expert) nu poate distinge fenotipurile macroscopice subtile care trădează prezența unei mutații genetice microscopice. Algoritmii de deep learning pot detecta și corela aceste texturi (radiomică) pentru a oferi un profil molecular instantaneu, ghidând medicii spre terapia țintită corectă.
+Imagistica surprinde tumora în întregime. Ipoteza radiogenomicii este că biologia tumorii lasă o amprentă macroscopică (formă, textură, densitate, captare metabolică) pe care ochiul uman nu o poate cuantifica, dar pe care un algoritm de învățare automată o poate detecta. Un astfel de sistem nu înlocuiește biopsia, dar poate ajuta la prioritizarea testelor și la triajul pacienților.
+
+\subsection{Reorientarea proiectului față de propunerea inițială}
+\label{sec:reorientare}
+
+Propunerea inițială urmărea predicția a cinci biomarkeri (EGFR, KRAS, ALK, ROS1, PD-L1) cu o singură rețea 3D ResNet-50 antrenată de la zero pe volume CT/PET, cu o împărțire fixă 70/15/15 a datelor. În urma analizei seturilor de date disponibile, proiectul a fost reorientat din următoarele motive:
+
+\begin{enumerate}
+    \item \textbf{Seturile primite în temă nu conțin etichete moleculare.} Setul Kaggle \textit{Chest CT-Scan images} conține aproximativ 1000 de imagini 2D (JPG/PNG), fără unități Hounsfield, fără volume 3D și fără identificatori de pacient (deci fără posibilitatea de a garanta separarea pacienților între antrenare și test). Setul LIDC-IDRI \cite{armato2011} conține 1010 pacienți cu CT 3D și noduli adnotați de radiologi, dar nu are PET, mutații sau histologie (diagnosticul confirmat există doar pentru un subset mic).
+    \item \textbf{Biomarkerii disponibili public sunt limitați.} Singurul set public cu imagini și mutații, NSCLC-Radiogenomics \cite{bakr2018}, are 43 de pacienți EGFR mutanți și 38 KRAS mutanți, dar doar \textbf{2} cazuri ALK pozitive; ROS1 și PD-L1 nu sunt disponibile. Prin urmare, ALK, ROS1 și PD-L1 au fost scoase din obiectivul principal.
+    \item \textbf{Volumul mic de date} (aproximativ 170 de pacienți cu mutații cunoscute) face nerealistă antrenarea de la zero a unei rețele 3D ResNet-50 pe volumul complet: rețeaua nu ar avea suficiente exemple pentru a învăța unde se află tumora și ar memora datele de antrenare (\textit{overfitting}).
+\end{enumerate}
+
+Noul design răspunde acestor limitări prin: (a) separarea localizării tumorii (Etapa 1), antrenată pe setul mare LIDC-IDRI, de clasificare (Etapa 2), care primește doar regiunea tumorală; (b) folosirea unei rețele mai mici, pre-antrenate (3D ResNet-18); (c) adăugarea histologiei ca sarcină auxiliară, pentru care există aproximativ 560 de pacienți etichetați (Lung-PET-CT-Dx \cite{li2020} și NSCLC-Radiogenomics); (d) validare încrucișată în locul unei singure împărțiri fixe. Setul Kaggle este păstrat doar ca baseline 2D de comparație.
 
 \section{Problema științifică abordată}
 
 \subsection{Descrierea problemei științifice}
-\textbf{Descrierea formală:} Problema abordată este una de \textit{clasificare multi-label multimodală}. Sistemul trebuie să învețe o funcție de mapare $f: (X_{img}, X_{tab}) \rightarrow Y$, unde:
-\begin{itemize}
-    \item $X_{img} \in \mathbb{R}^{D \times H \times W \times C}$ reprezintă volumul 3D spațial provenit din fuziunea CT și PET (ex. $C=2$ canale).
-    \item $X_{tab} \in \mathbb{R}^K$ reprezintă vectorul datelor clinice tabulare (Vârstă normalizată, Gen codificat \textit{one-hot}).
-    \item $Y \in [0,1]^N$ reprezintă vectorul probabilităților pentru cei $N$ biomarkeri independenți.
-\end{itemize}
+\textbf{Descrierea formală:} Problema este descompusă în două sub-probleme.
 
-\textbf{Descrierea plastică:} Plastic vorbind, problema constă în construirea unei \textit{„lupe matematice”}. Biologia microscopică a tumorii (ex. un „motor” stricat precum mutația EGFR) lasă o amprentă arhitecturală la scară macroscopică (modul în care tumoarea formează vase de sânge sau își modifică densitatea). Problema științifică este traducerea acestor texturi invizibile de pixeli gri într-o identitate biologică intimă, folosind contextul demografic (vârsta/genul) ca filtru de corecție pentru a preveni generalizările false.
+\textit{Etapa 1 -- segmentare.} Fiind dat un volum CT preprocesat $V \in \mathbb{R}^{D \times H \times W}$, se învață o funcție $g: V \mapsto M \in [0,1]^{D \times H \times W}$ care atribuie fiecărui voxel probabilitatea de a aparține tumorii. Din masca binarizată se extrage centrul tumorii, în jurul căruia se decupează un patch $X_{img} \in \mathbb{R}^{2 \times 64 \times 64 \times 64}$ (canalul 1: CT în HU normalizate, canalul 2: PET în SUV normalizat).
+
+\textit{Etapa 2 -- clasificare multimodală multi-task.} Fiind date patch-ul $X_{img}$ și vectorul clinic $X_{tab} \in \mathbb{R}^{K}$ (vârstă normalizată, gen și statut de fumător codificate \textit{one-hot}), se învață o funcție
+\[
+f: (X_{img}, X_{tab}) \mapsto \left( \hat{y}_{hist}, \hat{y}_{EGFR}, \hat{y}_{KRAS} \right),
+\]
+unde $\hat{y}_{hist} \in \Delta^{C-1}$ este o distribuție de probabilitate peste cele $C$ tipuri histologice (activare \textit{softmax}), iar $\hat{y}_{EGFR}, \hat{y}_{KRAS} \in [0,1]$ sunt probabilități independente (activare \textit{sigmoid}).
+
+Deoarece nu toți pacienții au toate etichetele, funcția de pierdere este mascată:
+\[
+\mathcal{L} = \lambda_{hist}\, m_{hist}\, \mathcal{L}_{CE}(\hat{y}_{hist}, y_{hist}) + \sum_{k \in \{EGFR,\, KRAS\}} \lambda_k\, m_k\, \mathcal{L}_{BCE}(\hat{y}_k, y_k),
+\]
+unde $m \in \{0,1\}$ indică dacă eticheta respectivă este cunoscută pentru pacient, $\mathcal{L}_{CE}$ este entropia încrucișată, $\mathcal{L}_{BCE}$ este entropia încrucișată binară (eventual în varianta \textit{focal loss} \cite{lin2017}), iar $\lambda$ sunt ponderi ale sarcinilor.
+
+\textbf{Descrierea plastică:} Problema seamănă cu munca unui anatomopatolog care, în loc de microscop, are doar fotografia exterioară a tumorii. Mai întâi trebuie să găsească tumora într-un volum de sute de milioane de voxeli (Etapa 1), apoi să o studieze atent și să deducă din forma, textura și activitatea ei metabolică ce fel de celule o compun și ce „motor'' genetic o conduce (Etapa 2). Datele clinice (fumatul, vârsta, genul) funcționează ca informații din anamneză, care schimbă probabilitățile de bază.
 
 \subsection{Abstract grafic}
-Deoarece sistemul generează un flux complet automatizat, diagrama de mai jos (prezentată în format simplificat) ilustrează pașii aplicației:
 
 \begin{center}
-\framebox{\parbox{0.9\textwidth}{
-\textbf{Abstract Grafic: Arhitectura de tip Late-Fusion}\\
+\framebox{\parbox{0.92\textwidth}{
+\textbf{Abstract grafic: pipeline-ul PulmoGnosis în două etape}\\
 \vspace{0.2cm}\\
-1. \textbf{Date Intrare:} [Scanare 3D CT + PET] \quad \& \quad [Date Clinice: Vârstă, Gen]\\
+1. \textbf{Date de intrare:} [CT 3D + PET 3D (opțional)] \quad \& \quad [Vârstă, gen, fumat]\\
 $\downarrow$\\
-2. \textbf{Pre-procesare:} [Izolare Tumorală 3D U-Net] \quad \& \quad [Normalizare Tabulară]\\
+2. \textbf{Etapa 0 -- Preprocesare:} [DICOM $\rightarrow$ HU / SUV] $\rightarrow$ [Resampling 1 mm$^3$] $\rightarrow$ [Co-registrare CT--PET]\\
 $\downarrow$\\
-3. \textbf{Extragere Trăsături:} [3D ResNet-50 $\rightarrow$ Vector Vizual 1024D] \quad [MLP $\rightarrow$ Vector Clinic 32D]\\
+3. \textbf{Etapa 1 -- Localizare:} [3D U-Net $\rightarrow$ mască tumorală] $\rightarrow$ [Patch 3D CT+PET, $64^3$]\\
 $\downarrow$\\
-4. \textbf{Fuziune (Late Fusion):} [Concatenare vectori: 1056D total]\\
+4. \textbf{Etapa 2 -- Extragere trăsături:} [3D ResNet-18 pre-antrenat $\rightarrow$ vector 512D] \quad [MLP $\rightarrow$ vector clinic 32D]\\
 $\downarrow$\\
-5. \textbf{Ieșire (Multi-Label):} [Straturi Dense cu activare Sigmoid] $\rightarrow$ [EGFR\%, KRAS\%, PD-L1\%]
+5. \textbf{Fuziune târzie:} [Concatenare: 544D] $\rightarrow$ [Straturi dense comune]\\
+$\downarrow$\\
+6. \textbf{Ieșiri (multi-task):} [Histologie -- softmax] \quad [EGFR\% -- sigmoid] \quad [KRAS\% -- sigmoid] \quad + [Hartă Grad-CAM]
 }}
 \end{center}
 
 \section{Metode existente de rezolvare a problemei (Related Work)}
 
-În literatura recentă de radiogenomică, mai multe studii au încercat să prezică profilul molecular folosind imagistica. Setul de date public folosit în acest proiect, NSCLC-Radiogenomics, este descris în \cite{bakr2018}.
+În literatura de radiogenomică, mai multe studii au încercat să prezică profilul molecular sau tipul histologic folosind imagistica. Setul de date NSCLC-Radiogenomics este descris în \cite{bakr2018}, iar o primă analiză radiogenomică pe o versiune timpurie a cohortei apare în \cite{gevaert2012}.
 
-\todo{Studiile citate anterior (Wang et al. 2022, Perez et al. 2023, Chen et al. 2023) nu au putut fi verificate și au fost eliminate. Înlocuiți-le cu 3--4 lucrări reale (cu DOI sau link PubMed/arXiv), găsite și citite de voi. Pentru fiecare, păstrați structura: \textit{Date}, \textit{Algoritm}, \textit{Rezultate} (cu cifrele exacte din articol).}
+\todo{Adăugați 3--4 lucrări reale (cu DOI sau link PubMed/arXiv), găsite și citite de voi. Pentru fiecare, păstrați structura: \textit{Date}, \textit{Algoritm}, \textit{Rezultate} (cu cifrele exacte din articol).}
 
 \begin{itemize}
-    \item \textbf{Predicția EGFR bazată strict pe imagini CT (3D-CNN):} \todo{lucrare reală}
+    \item \textbf{Predicția mutației EGFR din imagini CT cu rețele 3D:} \todo{lucrare reală}
 
-    \item \textbf{Evaluarea statusului PD-L1 din imagini pereche PET/CT:} \todo{lucrare reală}
+    \item \textbf{Clasificarea subtipului histologic (adenocarcinom vs. scuamos) din CT sau PET/CT:} \todo{lucrare reală}
 
     \item \textbf{Radiomică clasică (PyRadiomics + model clasic) pe NSCLC-Radiogenomics:} \todo{lucrare reală}
+
+    \item \textbf{Detecția și segmentarea nodulilor pe LIDC-IDRI / LUNA16:} \todo{lucrare reală}
 \end{itemize}
 
 \section{Metode efectiv folosite pentru rezolvarea problemei}
 
-Pentru a aborda neajunsurile modelelor anterioare, propunem următoarea arhitectură:
-
-\subsection{Arhitectura Deep Learning Multimodală (Late-Fusion 3D CNN + MLP)}
-Acesta este modelul principal.
+\subsection{Etapa 0 -- Preprocesare}
 \begin{itemize}
-    \item \textbf{Descriere:} Volumul CT/PET este procesat de un \textbf{3D ResNet-50} (fără stratul de clasificare final), rezultând un vector latent. Datele tabulare sunt trecute printr-un \textbf{Multi-Layer Perceptron (MLP)} cu straturi de \textit{Batch Normalization}. Cele două reprezentări sunt concatenate (Late Fusion) și trecute prin 2 straturi Dense (Fully Connected) folosind activare \textit{Sigmoid}.
-    \item \textbf{Procesul de învățare:} Optimizare cu algoritmul \textit{AdamW} (learning rate $1e^{-4}$), folosind o funcție de pierdere \textit{Focal Binary Cross-Entropy} pentru a penaliza sever modelul dacă ratează mutațiile rare (precum ALK).
+    \item \textbf{CT:} conversia valorilor brute în unități Hounsfield (HU) folosind parametrii \textit{RescaleSlope} și \textit{RescaleIntercept} din DICOM; ferestruire la $[-1000, 400]$ HU și scalare la $[0,1]$.
+    \item \textbf{PET:} conversia în SUV (\textit{Standardized Uptake Value}), folosind doza injectată, timpul de la injectare și greutatea pacientului.
+    \item \textbf{Resampling} la voxeli izotropi de $1 \times 1 \times 1$ mm (grosimea secțiunilor variază între 0,625 și 5 mm între scanere).
+    \item \textbf{Co-registrare:} PET-ul (aproximativ 4 mm/pixel) este aliniat și re-eșantionat în spațiul CT, folosind SimpleITK.
 \end{itemize}
 
-\subsection{Metrici de Evaluare}
-Performanța va fi evaluată folosind \textbf{ROC-AUC} (capacitatea de a distinge clasele) și \textbf{F1-Score} (armonizarea între precizie și recall, crucială datorită dezechilibrului claselor).
+\subsection{Etapa 1 -- Localizarea tumorii}
+\begin{itemize}
+    \item \textbf{Model:} 3D U-Net \cite{cicek2016}, implementat în MONAI sau configurat automat cu nnU-Net \cite{isensee2021}.
+    \item \textbf{Antrenare:} pre-antrenare pe LIDC-IDRI (contururile radiologilor, extrase cu \textit{pylidc} \cite{hancock2016}), urmată de ajustare fină pe cele 144 de măști tumorale din NSCLC-Radiogenomics și pe casetele din Lung-PET-CT-Dx, deoarece tumorile NSCLC sunt în general mai mari decât nodulii de screening din LIDC-IDRI.
+    \item \textbf{Ieșire:} mască 3D și un patch de $64^3$ voxeli centrat pe tumoră, extras din CT și PET.
+\end{itemize}
+
+\subsection{Etapa 2 -- Clasificare multimodală multi-task (Late-Fusion)}
+\begin{itemize}
+    \item \textbf{Ramura de imagine:} 3D ResNet-18 \cite{he2016} cu 2 canale de intrare, inițializat cu greutăți pre-antrenate pe imagini medicale (MedicalNet \cite{chen2019}), care produce un vector de 512 dimensiuni.
+    \item \textbf{Ramura clinică:} MLP cu \textit{Batch Normalization}, care produce un vector de 32 de dimensiuni.
+    \item \textbf{Fuziune:} concatenarea celor doi vectori (544D), urmată de straturi dense comune și trei capete de ieșire: histologie (softmax), EGFR și KRAS (sigmoid).
+    \item \textbf{Date lipsă:} pierderea mascată (Secțiunea 2.1) pentru etichetele lipsă; pentru pacienții fără PET, canalul PET este setat la zero, iar în antrenare canalul PET este ascuns aleator (\textit{modality dropout}), astfel încât modelul să funcționeze și doar cu CT.
+    \item \textbf{Procesul de învățare:} optimizator AdamW (rată de învățare $10^{-4}$), pierdere ponderată sau \textit{focal loss} pentru dezechilibrul claselor, augmentare 3D (rotații mici, oglindiri, zgomot, variații de intensitate) și \textit{early stopping} pe setul de validare.
+    \item \textbf{Explicabilitate:} hărți Grad-CAM \cite{selvaraju2017} suprapuse peste CT, pentru a verifica dacă modelul se concentrează pe tumoră.
+\end{itemize}
+
+\subsection{Metrici de evaluare}
+\begin{itemize}
+    \item \textbf{Etapa 1:} scorul Dice (suprapunerea dintre masca prezisă și cea de referință) și sensibilitatea detecției.
+    \item \textbf{Etapa 2:} ROC-AUC pentru fiecare ieșire, cu interval de încredere 95\% obținut prin bootstrap; F1, sensibilitate și specificitate; \textit{balanced accuracy} pentru histologie. Diferențele de AUC dintre variante sunt testate cu testul DeLong \cite{delong1988}.
+\end{itemize}
 
 \section{Metodologia Experimentală și Validarea}
 
-Deoarece proiectul se află în faza de dezvoltare, această secțiune descrie metodologia riguroasă care va fi urmată pentru antrenarea, testarea și validarea modelelor, evitând raportarea unor performanțe premature.
+Proiectul se află în faza de dezvoltare; această secțiune descrie metodologia care va fi urmată. Nu sunt raportate rezultate înainte de rularea efectivă a experimentelor.
 
 \subsection{Descrierea seturilor de date}
-Pentru antrenarea și validarea modelelor, se vor utiliza următoarele surse de date:
-\begin{itemize}
-    \item \textbf{Sursa publică:} Setul de date \textit{NSCLC-Radiogenomics} din baza The Cancer Imaging Archive (TCIA), recunoscut la nivel internațional, care conține imagini CT/PET și profile moleculare pentru peste 200 de pacienți.
-    \item \textbf{Date clinice:} Vârsta și Genul pacienților (anonimizate), precum și etichetele de \textit{Ground Truth} obținute prin biopsie IHC și secvențiere pentru markerii EGFR, KRAS, ALK și expresia PD-L1. Datele vor reflecta dezechilibrul natural al claselor în cancerele pulmonare (ex. mutațiile ALK având o prevalență scăzută, de obicei sub 5-8\%).
-\end{itemize}
 
-\todo{Verificați în setul de date descărcat câți pacienți au efectiv CT, PET și fiecare etichetă (EGFR, KRAS, ALK). Expresia PD-L1 și ROS1 s-ar putea să nu fie disponibile în NSCLC-Radiogenomics; actualizați lista de biomarkeri în funcție de ce conține setul. Adăugați un tabel cu numărul de cazuri pozitive/negative/lipsă pentru fiecare biomarker.}
-
-\subsection{Metodologia experimentală}
-Experimentele au fost concepute pentru a răspunde la două întrebări principale: 
-1) Cât de eficient poate gestiona arhitectura deep learning datele multimodale complexe? 
-2) Adăugarea datelor tabulare aduce o îmbunătățire statistic semnificativă față de utilizarea exclusivă a imaginilor?
-Parametrii planificați pentru rețeaua 3D: Batch size de 16, antrenare timp de maximum 100 de epoci, cu un mecanism de \textit{Early Stopping} setat la 15 epoci de stagnare pe setul de validare. Împărțirea datelor se va face la nivel de pacient (un pacient nu apare niciodată în două subseturi), stratificat după etichete.
-
-\todo{Cu aproximativ 200 de pacienți, o împărțire 70/15/15 lasă circa 30 de pacienți în setul de test (posibil 0--1 cazuri ALK pozitive). Decideți între această împărțire și validarea încrucișată stratificată (k-fold) și justificați alegerea.}
-
-\subsection{Rezultatele obținute}
-\todo{Nu există încă rezultate experimentale. Completați tabelul de mai jos doar cu valori obținute din rulări reale, raportând media și intervalul de încredere (bootstrap) pentru fiecare biomarker, precum și numărul de cazuri pozitive din setul de test.}
+Toate seturile sunt publice, anonimizate și provin din The Cancer Imaging Archive (TCIA). Cifrele de mai jos au fost numărate din fișierele de metadate oficiale ale fiecărui set.
 
 \begin{table}[h]
 \centering
-\begin{tabular}{@{}lccc@{}}
+\small
+\begin{tabular}{@{}lccl@{}}
 \toprule
-\textbf{Biomarker} & \textbf{AUC (IÎ 95\%)} & \textbf{F1-Score} & \textbf{Nr. pozitivi (test)} \\ \midrule
-\textbf{EGFR} & -- & -- & -- \\
-\textbf{KRAS} & -- & -- & -- \\
-\textbf{ALK} & -- & -- & -- \\
-\textbf{PD-L1} & -- & -- & -- \\ \bottomrule
+\textbf{Set de date} & \textbf{Pacienți} & \textbf{Modalități} & \textbf{Rol} \\ \midrule
+LIDC-IDRI \cite{armato2011} & 1010 & CT & Etapa 1 (segmentare) \\
+NSCLC-Radiogenomics \cite{bakr2018} & 211 & CT, PET (201), SEG (144) & Etapa 2 (mutații, histologie); ajustare Etapa 1 \\
+Lung-PET-CT-Dx \cite{li2020} & 355 & CT, PET (parțial) & Etapa 2 (histologie); ajustare Etapa 1 \\
+Kaggle Chest CT-Scan & $\sim$1000 imagini 2D & JPG/PNG & Baseline 2D \\ \bottomrule
 \end{tabular}
-\caption{Performanța arhitecturii Late-Fusion CNN pe setul de testare (de completat).}
+\caption{Seturile de date folosite și rolul fiecăruia.}
 \end{table}
 
-\subsection{Analiza statistică și Studii de Ablație}
-\textbf{Studiul de ablație} va compara următoarele variante, pentru a răspunde la a doua întrebare de cercetare:
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Etichetă (NSCLC-Radiogenomics)} & \textbf{Cunoscută} & \textbf{Pozitivi} & \textbf{Cunoscută și cu PET} \\ \midrule
+EGFR mutant & 172 & 43 & 163 (39 pozitivi) \\
+KRAS mutant & 171 & 38 & 162 (36 pozitivi) \\
+ALK translocat & 157 & 2 & 152 (2 pozitivi) \\ \bottomrule
+\end{tabular}
+\caption{Disponibilitatea etichetelor moleculare. ALK este exclus din obiectivul principal din cauza numărului de cazuri pozitive.}
+\end{table}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Set} & \textbf{Adenocarcinom} & \textbf{Scuamos} & \textbf{Celule mici} & \textbf{Altele} \\ \midrule
+Lung-PET-CT-Dx & 251 & 61 & 38 & 5 (celule mari) \\
+NSCLC-Radiogenomics & 172 & 35 & -- & 4 (NOS) \\ \midrule
+\textbf{Total} & 423 & 96 & 38 & 9 \\ \bottomrule
+\end{tabular}
+\caption{Distribuția tipurilor histologice. Clasele foarte rare (celule mari, NOS) vor fi excluse sau grupate.}
+\end{table}
+
+Date clinice disponibile în ambele seturi NSCLC: vârstă, gen și statut de fumător.
+
+\subsection{Metodologia experimentală}
+Experimentele urmăresc trei întrebări de cercetare:
+\begin{enumerate}
+    \item Poate un model multimodal CT+PET să prezică tipul histologic și mutațiile EGFR/KRAS mai bine decât modelele bazate doar pe date clinice sau pe radiomică clasică?
+    \item Ce contribuție au PET-ul, datele clinice și sarcina auxiliară de histologie?
+    \item Cât de bine se generalizează modelul pe date de la alt spital (\textit{domain shift})?
+\end{enumerate}
+
+\textbf{Împărțirea datelor:} validare încrucișată stratificată în 5 fold-uri, la nivel de pacient (un pacient nu apare niciodată în două subseturi). Pentru fiecare fold se raportează și numărul de cazuri pozitive. Statisticile de normalizare se calculează doar pe datele de antrenare ale fiecărui fold.
+
+\textbf{Baseline-uri:}
 \begin{itemize}
-    \item Model doar pe imagini (CT + PET, fără date tabulare);
-    \item Model doar pe date tabulare (Vârstă, Gen);
-    \item Model doar CT vs. CT + PET (contribuția PET);
-    \item Modelul complet Late-Fusion.
+    \item regresie logistică pe date clinice (vârstă, gen, fumat);
+    \item radiomică (trăsături PyRadiomics extrase din masca tumorală) + regresie logistică;
+    \item CNN 2D pe setul Kaggle (doar pentru histologie, cu mențiunea limitărilor setului).
 \end{itemize}
 
-\todo{Completați rezultatele ablației și testul statistic folosit pentru a compara variantele (ex. testul DeLong pentru AUC).}
+\textbf{Validare externă (histologie):} antrenare pe Lung-PET-CT-Dx și testare pe NSCLC-Radiogenomics (adenocarcinom vs. scuamos).
+
+\textbf{Risc metodologic identificat:} carcinomul cu celule mici apare doar în Lung-PET-CT-Dx, deci un model ar putea învăța să recunoască sursa datelor (scanerul, protocolul) în loc de tipul tumorii. Această clasă va fi evaluată separat, iar comparația adenocarcinom vs. scuamos se va face și între seturi.
+
+\subsection{Rezultatele obținute}
+\todo{Nu există încă rezultate experimentale. Completați tabelele doar cu valori obținute din rulări reale (media pe fold-uri și intervalul de încredere 95\%).}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Etapa 1 -- Segmentare} & \textbf{Dice} & \textbf{Sensibilitate} \\ \midrule
+LIDC-IDRI & -- & -- \\
+NSCLC-Radiogenomics (după ajustare) & -- & -- \\ \bottomrule
+\end{tabular}
+\caption{Performanța Etapei 1 (de completat).}
+\end{table}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lccc@{}}
+\toprule
+\textbf{Model} & \textbf{Histologie (bal. acc.)} & \textbf{EGFR AUC (IÎ 95\%)} & \textbf{KRAS AUC (IÎ 95\%)} \\ \midrule
+Regresie logistică clinică & -- & -- & -- \\
+Radiomică + regresie logistică & -- & -- & -- \\
+CNN 2D (Kaggle) & -- & n/a & n/a \\
+Doar imagine (CT) & -- & -- & -- \\
+Doar imagine (CT + PET) & -- & -- & -- \\
+Late-Fusion fără multi-task & -- & -- & -- \\
+\textbf{Late-Fusion complet} & -- & -- & -- \\ \bottomrule
+\end{tabular}
+\caption{Performanța Etapei 2 și studiul de ablație (de completat).}
+\end{table}
+
+\subsection{Analiza statistică și studii de ablație}
+Tabelul Etapei 2 servește și ca studiu de ablație: fiecare rând elimină o componentă (PET, datele clinice, sarcina de histologie) pentru a-i măsura contribuția. Diferențele vor fi testate cu testul DeLong.
+
+\todo{Completați analiza după obținerea rezultatelor, inclusiv rezultatele validării externe.}
 
 \section{Concluzii și posibile îmbunătățiri}
 \todo{Concluziile se vor scrie după obținerea rezultatelor experimentale.}
 
-Proiectul propune un sistem de biopsie virtuală bazat pe o arhitectură 3D CNN Late-Fusion, cu scopul de a evalua dacă rețelele profunde pot capta din imagistica CT/PET trăsături corelate cu profilul genomic al tumorii.
+Proiectul propune un sistem de biopsie virtuală în două etape, care separă localizarea tumorii de predicția biologiei ei și folosește histologia ca sarcină auxiliară pentru a compensa numărul mic de pacienți cu mutații cunoscute.
 
-\textbf{Posibile îmbunătățiri:} Integrarea unor arhitecturi de tip \textit{Vision Transformer 3D} pentru a capta relațiile globale din imagini mai bine decât convoluțiile. De asemenea, extinderea setului de date printr-o abordare multi-centrică (date de la mai multe spitale) ar spori robustețea modelului la diferite echipamente de scanare.
+\textbf{Posibile îmbunătățiri:}
+\begin{itemize}
+    \item extinderea la ALK, ROS1 și PD-L1 prin colaborare cu un spital sau prin seturi suplimentare (ex. TCGA-LUAD/LUSC);
+    \item arhitecturi de tip \textit{Vision Transformer 3D} și pre-antrenare auto-supervizată pe volume CT neetichetate;
+    \item validare multi-centrică pe date de la mai multe spitale și echipamente de scanare.
+\end{itemize}
 
 \section{Referințe}
 
-\begin{thebibliography}{9}
+\begin{thebibliography}{99}
+
+\bibitem{armato2011}
+Armato III, S. G., McLennan, G., Bidaut, L., et al. (2011).
+\textit{The Lung Image Database Consortium (LIDC) and Image Database Resource Initiative (IDRI): A completed reference database of lung nodules on CT scans}.
+Medical Physics, 38, 915--931. \url{https://doi.org/10.1118/1.3528204}.
+Date: \url{https://doi.org/10.7937/K9/TCIA.2015.LO9QL9SX}
 
 \bibitem{bakr2018}
 Bakr, S., Gevaert, O., Echegaray, S., et al. (2018).
 \textit{A radiogenomic dataset of non-small cell lung cancer}.
-Scientific Data, 5, 180202. \url{https://doi.org/10.1038/sdata.2018.202}
+Scientific Data, 5, 180202. \url{https://doi.org/10.1038/sdata.2018.202}.
+Date: \url{https://doi.org/10.7937/K9/TCIA.2017.7hs46erv}
+
+\bibitem{li2020}
+Li, P., Wang, S., Li, T., Lu, J., HuangFu, Y., Wang, D. (2020).
+\textit{A Large-Scale CT and PET/CT Dataset for Lung Cancer Diagnosis (Lung-PET-CT-Dx)} [Data set].
+The Cancer Imaging Archive. \url{https://doi.org/10.7937/TCIA.2020.NNC2-0461}
+
+\bibitem{gevaert2012}
+Gevaert, O., Xu, J., Hoang, C. D., et al. (2012).
+\textit{Non-Small Cell Lung Cancer: Identifying Prognostic Imaging Biomarkers by Leveraging Public Gene Expression Microarray Data -- Methods and Preliminary Results}.
+Radiology. \url{https://doi.org/10.1148/radiol.12111607}
+
+\bibitem{hancock2016}
+Hancock, M. C., Magnan, J. F. (2016).
+\textit{Lung nodule malignancy classification using only radiologist-quantified image features as inputs to statistical learning algorithms}.
+Journal of Medical Imaging, 3(4), 044504. \url{https://doi.org/10.1117/1.JMI.3.4.044504}
+
+\bibitem{cicek2016}
+Çiçek, Ö., Abdulkadir, A., Lienkamp, S. S., Brox, T., Ronneberger, O. (2016).
+\textit{3D U-Net: Learning Dense Volumetric Segmentation from Sparse Annotation}.
+MICCAI 2016. \url{https://arxiv.org/abs/1606.06650}
+
+\bibitem{isensee2021}
+Isensee, F., Jaeger, P. F., Kohl, S. A. A., Petersen, J., Maier-Hein, K. H. (2021).
+\textit{nnU-Net: a self-configuring method for deep learning-based biomedical image segmentation}.
+Nature Methods, 18, 203--211. \url{https://doi.org/10.1038/s41592-020-01008-z}
+
+\bibitem{he2016}
+He, K., Zhang, X., Ren, S., Sun, J. (2016).
+\textit{Deep Residual Learning for Image Recognition}.
+CVPR 2016. \url{https://arxiv.org/abs/1512.03385}
+
+\bibitem{chen2019}
+Chen, S., Ma, K., Zheng, Y. (2019).
+\textit{Med3D: Transfer Learning for 3D Medical Image Analysis}.
+\url{https://arxiv.org/abs/1904.00625}
+
+\bibitem{lin2017}
+Lin, T.-Y., Goyal, P., Girshick, R., He, K., Dollár, P. (2017).
+\textit{Focal Loss for Dense Object Detection}.
+ICCV 2017. \url{https://arxiv.org/abs/1708.02002}
+
+\bibitem{selvaraju2017}
+Selvaraju, R. R., Cogswell, M., Das, A., Vedantam, R., Parikh, D., Batra, D. (2017).
+\textit{Grad-CAM: Visual Explanations from Deep Networks via Gradient-based Localization}.
+ICCV 2017. \url{https://arxiv.org/abs/1610.02391}
+
+\bibitem{delong1988}
+DeLong, E. R., DeLong, D. M., Clarke-Pearson, D. L. (1988).
+\textit{Comparing the areas under two or more correlated receiver operating characteristic curves: a nonparametric approach}.
+Biometrics, 44(3), 837--845.
 
 % TODO: adăugați aici referințele reale pentru secțiunea Related Work.
 
