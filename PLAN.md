@@ -8,6 +8,29 @@ Săptămânile sunt numerotate de la **S1 = 26 oct. – 1 nov. 2026**.
 > Lab 6 ar cădea în vacanța de iarnă, așa că planul presupune că Lab 6 și Lab 7 se mută în ianuarie.
 > Corectați coloana *Termen* dacă datele reale diferă.
 
+> **Terminologie:** în acest plan, **„Etapa 1–6"** înseamnă etapele de evaluare de la laborator.
+> Părțile pipeline-ului din README se numesc **„Etapa 0 / 1 / 2 a pipeline-ului"** (preprocesare /
+> localizarea tumorii / clasificatorul).
+
+---
+
+## 📍 0. Stadiul curent (27 oct. 2026)
+
+| Etapa | Stare | Ce mai rămâne |
+|---|---|---|
+| **1 → Lab 2** | 🟡 Aproape gata | *Related work* cu 3–4 lucrări reale; capturi de ecran în raport |
+| **2 → Lab 3** | ⬜ Neînceput — **responsabil: `TODO`** | Totul (vezi secțiunea Etapa 2) |
+| **3–6** | ⬜ Neînceput | — |
+
+**Ce există deja în repository:**
+- aplicația demo Streamlit (`app/`) cu flow-ul complet în 5 pași și un caz demonstrativ sintetic (fantomă CT + PET în DICOM);
+- pachetul `src/pulmognosis/`: citire DICOM, conversii HU/SUV, alinierea PET pe CT la rezoluția nativă,
+  extragerea cubului pentru model (**128³ voxeli de 0,75 mm**, `extract_model_patch`), interfața `Predictor` pentru modele;
+- 19 teste automate (`pytest`);
+- raportul cu secțiunile Etapei 1 (funcționalități, problema, instrumente).
+
+**Ce NU există în repository (se obține local):** datele (`data/`), metadatele TCIA, mediul Python (`.venv`).
+
 ---
 
 ## 🎯 1. Etapele de evaluare și punctajul
@@ -31,9 +54,9 @@ impact mare (multi-task, PET, segmentarea automată, statistica) exact acolo.
 |---|---|
 | 1 | Aplicația demo cu flow-ul complet (încărcare → vizualizare → panou de rezultate), cu un model *placeholder* marcat clar |
 | 2 | Primele modele pe date puține: CNN 2D pe Kaggle, regresie logistică clinică, primul model 3D pe un lot mic din NSCLC-Radiogenomics |
-| 3 | Etapa 2 (histologie + EGFR/KRAS) pe seturile complete, cu baseline-uri și comparație cu literatura |
+| 3 | Clasificatorul (Etapa 2 a pipeline-ului: histologie + EGFR/KRAS) pe seturile complete, cu baseline-uri și comparație cu literatura |
 | 4 | Îmbunătățiri: pre-antrenare MedicalNet, PET + date clinice (fuziune), multi-task, augmentare — cu ablații |
-| 5 | Etapa 1 (3D U-Net) în aplicație → pipeline complet; validare externă; Grad-CAM; statistică (bootstrap, DeLong); video |
+| 5 | Localizarea automată (Etapa 1 a pipeline-ului, 3D U-Net) în aplicație → pipeline complet; validare externă; Grad-CAM; statistică (bootstrap, DeLong); video |
 | 6 | Pitch + demo live, SWOT, concluzii |
 
 ---
@@ -42,9 +65,9 @@ impact mare (multi-task, PET, segmentarea automată, statistica) exact acolo.
 
 | Rol | Responsabil | Zonă de cod | Ce livrează |
 |---|---|---|---|
-| **R1 — Date și preprocesare** | `TODO` | `src/pulmognosis/data/`, `src/pulmognosis/preprocessing/` | Tabelul de cohortă, descărcarea, Etapa 0, patch-urile 3D, integrarea pipeline-ului |
-| **R2 — Modele de clasificare și evaluare** | `TODO` | `src/pulmognosis/classification/`, `src/pulmognosis/evaluation/` | Baseline-uri, Etapa 2, validare încrucișată, ablații, statistică |
-| **R3 — Aplicație și segmentare** | `TODO` | `app/`, `src/pulmognosis/segmentation/` | Aplicația demo (din S1), Etapa 1 (3D U-Net), Grad-CAM, video |
+| **R1 — Date și preprocesare** | `TODO` | `src/pulmognosis/data/`, `src/pulmognosis/preprocessing/` | Tabelul de cohortă, descărcarea, preprocesarea (Etapa 0 a pipeline-ului), cuburile 3D, integrarea pipeline-ului |
+| **R2 — Modele de clasificare și evaluare** | `TODO` | `src/pulmognosis/classification/`, `src/pulmognosis/evaluation/` | Baseline-uri, clasificatorul (Etapa 2 a pipeline-ului), validare încrucișată, ablații, statistică |
+| **R3 — Aplicație și segmentare** | `TODO` | `app/`, `src/pulmognosis/segmentation/` | Aplicația demo (din S1), localizarea (Etapa 1 a pipeline-ului, 3D U-Net), Grad-CAM, video |
 
 **Dacă echipa are 2 membri:** R1 preia segmentarea (din S5), R3 rămâne pe aplicație, Grad-CAM și video,
 iar R2 rămâne pe modele.
@@ -64,17 +87,21 @@ R3  app v0 │ U-Net   │ app v1  │ U-Net ft │ app final + video │ demo
        E1 ▲      E2 ▲      E3 ▲      E4 ▲   (vacanță)   E5 ▲       E6 ▲
 ```
 
-### Etapa 1 → Lab 2 (S1, **săptămâna aceasta**) — 15 puncte
+### Etapa 1 → Lab 2 (S1) — 15 puncte
 
-| R1 | R2 | R3 |
-|---|---|---|
-| Structura repository-ului, `requirements.txt`, mediul Python. Script `build_cohort.py` din metadatele deja descărcate | **Raport:** *related work* cu 3–4 lucrări reale (radiogenomică EGFR, histologie din CT/PET, radiomică, detecție pe LIDC) + secțiunea de instrumente și tehnologii | **Aplicația v0 (Streamlit):** încărcare DICOM (CT + PET opțional) → vizualizare secțiuni CT cu PET suprapus → formular clinic → panou de rezultate generat de un model *placeholder*, marcat vizibil „DEMO – fără model antrenat" |
+| Sarcină | Stare |
+|---|---|
+| Structura repository-ului, `requirements.txt`, `pyproject.toml`, mediul Python 3.12 | ✅ |
+| **Aplicația v0 (Streamlit):** încărcare DICOM → vizualizare CT + PET la rezoluția nativă → date clinice → localizare (euristică + corecție manuală) → panou de rezultate *placeholder*, marcat „DEMO – fără model antrenat" | ✅ |
+| Preprocesare (Etapa 0 a pipeline-ului) cu teste unitare | ✅ |
+| **Raport:** funcționalitățile aplicației, problema (plastic + formal), instrumente și tehnologii | ✅ |
+| **Raport:** *related work* cu 3–4 lucrări reale (radiogenomică EGFR, histologie din CT/PET, radiomică, detecție pe LIDC) | ⬜ |
+| **Raport:** capturi de ecran ale celor 5 pași ai aplicației | ⬜ |
 
-**Toată echipa:** secțiunea *Funcționalitățile aplicației* din raport (cu capturi de ecran din aplicația v0);
-recitirea descrierii plastice și formale (există deja).
+*(Scriptul `build_cohort.py` a fost mutat în Etapa 2, unde e folosit prima dată.)*
 
 **Gata când:**
-- [ ] aplicația rulează local cu un pacient de test, de la încărcare până la panoul de rezultate;
+- [x] aplicația rulează local cu un pacient de test, de la încărcare până la panoul de rezultate;
 - [ ] raportul conține funcționalitățile, problema (plastic + formal), *related work* cu referințe reale, instrumentele.
 
 ### Etapa 2 → Lab 3 (S2–S3, 2–15 nov.) — 10 puncte
@@ -86,7 +113,7 @@ predicție reală afișată, alături de valorile *placeholder* marcate ca atare
 |---|---|---|---|---|
 | **A** | **Regresie logistică** pe vârstă, gen, fumat | Tabelul clinic NSCLC-Radiogenomics, 211 pacienți — **fără imagini, poate începe din prima zi** | EGFR, KRAS | Baseline-ul pe care orice model ulterior trebuie să-l bată; primul model real **în aplicație** |
 | **B** | **CNN 2D** (ResNet-18 pre-antrenat pe ImageNet, ajustat fin) | Kaggle, ~1000 de imagini 2D | Histologie (3 tipuri + normal) | Model rapid pe imagini; limitările setului (fără ID de pacient, risc de *leakage*) se documentează explicit |
-| **C** | **3D ResNet-18** (greutăți MedicalNet) pe cubul CT+PET de 128³ la 0,75 mm | **~40 de pacienți** NSCLC-Radiogenomics, cubul centrat pe masca tumorală oficială (SEG) | Adenocarcinom vs. scuamos | Prima versiune a modelului nostru din Etapa 2 |
+| **C** | **3D ResNet-18** (greutăți MedicalNet) pe cubul CT+PET de 128³ la 0,75 mm | **~40 de pacienți** NSCLC-Radiogenomics, cubul centrat pe masca tumorală oficială (SEG) | Adenocarcinom vs. scuamos | Prima versiune a clasificatorului (Etapa 2 a pipeline-ului) |
 
 **Datele disponibile (numărate din metadate):** 144 de pacienți au CT + PET + mască tumorală
 (112 adenocarcinom, 29 scuamos; 23 EGFR mutant din 117 cunoscuți). Lotul de ~40 se alege stratificat
@@ -105,8 +132,18 @@ brute se șterg după procesare.
 `pylidc` și un prim U-Net de test pentru a verifica memoria GPU.
 
 **De pregătit / aprobat înainte de start:**
+- metadatele TCIA (3 fișiere mici, nu sunt în repository), în `data/metadata/`:
+  - <https://www.cancerimagingarchive.net/wp-content/uploads/NSCLCR01Radiogenomic_DATA_LABELS_2018-05-22_1500-shifted.csv> (date clinice și etichete)
+  - <https://www.cancerimagingarchive.net/wp-content/uploads/NSCLC_Radiogenomics-6-1-21-Version-4-nbia-digest.xlsx> (inventarul seriilor)
+  - <https://www.cancerimagingarchive.net/wp-content/uploads/statistics-clinical-20201221.xlsx> (Lung-PET-CT-Dx, pentru etapele următoare)
 - descărcări: ~18 GB de scanări (pe loturi), greutățile MedicalNet (~100–200 MB), PyTorch cu CUDA (~2,5 GB);
-- un cont Kaggle (sau descărcarea manuală a setului) pentru modelul B.
+- un cont Kaggle (sau descărcarea manuală a setului) pentru modelul B;
+- spațiul liber pe disc al celui care rulează (cifrele de mai sus presupun ~29 GB).
+
+**Unde intră codul:** `src/pulmognosis/data/` (cohortă, descărcare, SEG), `src/pulmognosis/evaluation/`
+(fold-uri, metrici, bootstrap), `src/pulmognosis/classification/` (modelele A, B, C), `scripts/` (puncte de
+intrare), `tests/`. Modelul A intră în aplicație printr-o clasă nouă care respectă interfața `Predictor`
+din `src/pulmognosis/inference.py` — aplicația nu trebuie restructurată.
 
 **Așteptări realiste:** cu ~40 de pacienți, modelul C va avea probabil performanță modestă și intervale de
 încredere largi — normal pentru „small data". Comparația importantă este dacă modelul pe imagini bate
@@ -122,8 +159,8 @@ baseline-ul clinic; Etapa 3 (toți cei 144+ pacienți) și Etapa 4 (îmbunătă�
 
 | Săpt. | R1 | R2 | R3 |
 |---|---|---|---|
-| **S4** | Restul NSCLC-Radiogenomics (pe loturi, păstrând doar patch-urile) | Etapa 2 pe NSCLC-Radiogenomics complet: histologie + EGFR + KRAS (pierdere mascată) | Antrenarea U-Net pe LIDC (precizie mixtă, patch-uri 96³) |
-| **S5** | Descărcare și preprocesare **Lung-PET-CT-Dx** (casete → patch-uri) | **Baseline radiomic** (PyRadiomics + regresie logistică). Tabelul de comparație cu SOTA (AUC-urile publicate în lucrările din *related work*) | **Aplicația v1:** modelul real înlocuiește *placeholder*-ul (cu patch-uri din adnotări) |
+| **S4** | Restul NSCLC-Radiogenomics (pe loturi, păstrând doar cuburile) | Clasificatorul pe NSCLC-Radiogenomics complet: histologie + EGFR + KRAS (pierdere mascată) | Antrenarea U-Net pe LIDC (precizie mixtă, patch-uri 96³) |
+| **S5** | Descărcare și preprocesare **Lung-PET-CT-Dx** (casete → cuburi) | **Baseline radiomic** (PyRadiomics + regresie logistică). Tabelul de comparație cu SOTA (AUC-urile publicate în lucrările din *related work*) | **Aplicația v1:** modelul real înlocuiește *placeholder*-ul (cu cuburi centrate pe adnotări) |
 
 **Raport:** metodologia pe date reale, rezultate cu intervale de încredere, comparație cu SOTA.
 
@@ -149,7 +186,7 @@ Fiecare îmbunătățire se măsoară față de versiunea din Etapa 3 (**ablați
 
 | Săpt. | R1 | R2 | R3 |
 |---|---|---|---|
-| **S8** | **Integrare:** script pacient nou DICOM → Etapa 0 → Etapa 1 → patch → Etapa 2 | **Noi îmbunătățiri:** **validare externă** (antrenare Lung-PET-CT-Dx → test NSCLC-Radiogenomics); patch-uri din măștile prezise vs. adnotate | Grad-CAM pe modelul Etapei 2 |
+| **S8** | **Integrare:** script pacient nou DICOM → preprocesare → localizare (U-Net) → cub → clasificator | **Noi îmbunătățiri:** **validare externă** (antrenare Lung-PET-CT-Dx → test NSCLC-Radiogenomics); cuburi din măștile prezise vs. adnotate | Grad-CAM pe clasificator |
 | **S9** | Testarea pipeline-ului pe pacienți ținuți deoparte | **Analiza statistică:** bootstrap, test DeLong între variante, curbe ROC, matrici de confuzie | **Aplicația finală:** pipeline complet integrat (fără adnotări manuale) + Grad-CAM |
 | **S10** | *(vacanță — doar rezervă)* | *(vacanță — doar rezervă)* | *(vacanță — doar rezervă)* |
 | **S11** | Curățarea codului | Secțiunea de analiză statistică din raport | **Teaser video** (1–2 min: problema, soluția, demo); **slide-uri draft** (toată echipa) |
@@ -173,7 +210,8 @@ Fiecare îmbunătățire se măsoară față de versiunea din Etapa 3 (**ablați
 ## ⚙️ 4. Reguli de lucru în echipă
 
 - **Git:** câte o ramură pentru fiecare sarcină (ex. `feature/hu-conversion`), *pull request* revizuit de un coleg înainte de unire în `main`.
-- **Date:** nu se pun niciodată în git (`data/`, greutăți, rezultate). Fiecare membru descarcă local cu aceleași scripturi.
+- **Date:** nu se pun niciodată în git (`data/`, greutăți, rezultate, `.venv`). Repository-ul nu are `.gitignore`; fiecare membru pune regulile de ignorare local, în `.git/info/exclude` (`/data/`, `/checkpoints/`, `/runs/`, `.venv/`, `__pycache__/`, `*.egg-info/`, `*.dcm`, `*.nii.gz`, `*.pt`, `*.pth`). Fiecare membru descarcă datele local cu aceleași scripturi.
+- **Limbă:** codul, comentariile și mesajele de commit în engleză; README, PLAN și raportul în română.
 - **Reproductibilitate:** fiecare experiment are un fișier de configurare în `configs/`, *seed* fix și rezultatele salvate împreună cu configurația. Împărțirea în fold-uri se generează **o singură dată** și e folosită de toți.
 - **Urmărirea experimentelor:** un proiect comun Weights & Biases (sau MLflow), ca toată echipa să vadă toate rulările.
 - **Rezultate în raport:** doar cifre care provin din rulări reale, cu link către rularea respectivă.
@@ -187,7 +225,7 @@ Fiecare îmbunătățire se măsoară față de versiunea din Etapa 3 (**ablați
 |---|---|
 | Laptop cu RTX 3060 (6 GB VRAM), 16 GB RAM | Preprocesare, Etapa 2 (cuburi 128³: batch 4–8 cu precizie mixtă), teste U-Net, aplicația |
 | Google Colab / Kaggle Notebooks (GPU gratuit) | Antrenarea U-Net pe LIDC dacă 6 GB nu ajung; rulări paralele ale fold-urilor |
-| Spațiu pe disc | ~29 GB liberi: se descarcă pe loturi, se păstrează doar patch-urile procesate (< 5 GB în total) |
+| Spațiu pe disc | ~29 GB liberi: se descarcă pe loturi, se păstrează doar cuburile procesate (~8 MB/pacient) |
 | Server GPU al facultății | `TODO`: de întrebat coordonatorul dacă există |
 
 **Pentru 6 GB VRAM:** precizie mixtă (`torch.autocast`), batch mic (2–4) pentru U-Net, patch-uri de 96³
