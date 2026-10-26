@@ -6,7 +6,10 @@
 \babelfont{rm}{Noto Sans}
 \usepackage{amsmath}
 \usepackage{booktabs}
+\usepackage{xcolor}
 \usepackage{hyperref}
+
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{TODO:} #1}}
 
 \title{\textbf{Biopsia Virtuală pentru Cancerul Pulmonar: Predicția Biomarkerilor Tumorali folosind Învățarea Multimodală (Late-Fusion)}}
 \author{Raport de Proiect}
@@ -59,22 +62,21 @@ $\downarrow$\\
 
 \section{Metode existente de rezolvare a problemei (Related Work)}
 
-În literatura recentă de radiogenomică, mai multe studii au încercat să prezică profilul molecular folosind imagistica:
+În literatura recentă de radiogenomică, mai multe studii au încercat să prezică profilul molecular folosind imagistica. Setul de date public folosit în acest proiect, NSCLC-Radiogenomics, este descris în \cite{bakr2018}.
+
+\todo{Studiile citate anterior (Wang et al. 2022, Perez et al. 2023, Chen et al. 2023) nu au putut fi verificate și au fost eliminate. Înlocuiți-le cu 3--4 lucrări reale (cu DOI sau link PubMed/arXiv), găsite și citite de voi. Pentru fiecare, păstrați structura: \textit{Date}, \textit{Algoritm}, \textit{Rezultate} (cu cifrele exacte din articol).}
 
 \begin{itemize}
-    \item \textbf{Wang et al. (2022) - Predicția EGFR bazată strict pe imagini:} 
-    \textit{Date:} 850 scanări CT de la pacienți cu NSCLC. \textit{Algoritm:} 3D Convolutional Neural Network (3D-CNN). \textit{Rezultate:} Au obținut o arie sub curba ROC (AUC) de 0.82 pentru mutația EGFR, dar modelul a fost limitat de lipsa integrării datelor clinice.
-    
-    \item \textbf{Perez et al. (2023) - Evaluarea statusului PD-L1:} 
-    \textit{Date:} 420 pacienți cu date pereche CT și PET. \textit{Algoritm:} Rețea multimodală cu arhitectură de tip \textit{Early-Fusion} (imagini stivuite). \textit{Rezultate:} AUC de 0.85 pentru diferențierea PD-L1 pozitiv vs. negativ, subliniind importanța metabolismului (PET) în predicția markerilor imunitari.
-    
-    \item \textbf{Chen et al. (2023) - Învățare Multi-Task pentru biomarkeri:} 
-    \textit{Date:} Baza de date The Cancer Imaging Archive (TCIA) - NSCLC Radiogenomics. \textit{Algoritm:} XGBoost bazat pe trăsături extrase manual cu PyRadiomics. \textit{Rezultate:} Performanță moderată (AUC 0.76), evidențiind necesitatea extragerii automate de trăsături prin rețele neuronale profunde.
+    \item \textbf{Predicția EGFR bazată strict pe imagini CT (3D-CNN):} \todo{lucrare reală}
+
+    \item \textbf{Evaluarea statusului PD-L1 din imagini pereche PET/CT:} \todo{lucrare reală}
+
+    \item \textbf{Radiomică clasică (PyRadiomics + model clasic) pe NSCLC-Radiogenomics:} \todo{lucrare reală}
 \end{itemize}
 
 \section{Metode efectiv folosite pentru rezolvarea problemei}
 
-Pentru a aborda neajunsurile modelelor anterioare, am implementat o arhitectură avansată:
+Pentru a aborda neajunsurile modelelor anterioare, propunem următoarea arhitectură:
 
 \subsection{Arhitectura Deep Learning Multimodală (Late-Fusion 3D CNN + MLP)}
 Acesta este modelul principal.
@@ -84,14 +86,7 @@ Acesta este modelul principal.
 \end{itemize}
 
 \subsection{Metrici de Evaluare}
-Performanța a fost evaluată folosind \textbf{ROC-AUC} (capacitatea de a distinge clasele) și \textbf{F1-Score} (armonizarea între precizie și recall, crucială datorită dezechilibrului claselor).
-
-\section{Rezultate experimentale obținute}
-    \item \textbf{Procesul de optimizare:} Matricea rezultată este folosită pentru a antrena un algoritm \textbf{Random Forest Multi-Output}. Hiperparametrii (număr de arbori, adâncime) au fost optimizați via \textit{GridSearchCV}.
-\end{itemize}
-
-\subsection{Metrici de Evaluare}
-Performanța a fost evaluată folosind \textbf{ROC-AUC} (capacitatea de a distinge clasele) și \textbf{F1-Score} (armonizarea între precizie și recall, crucială datorită dezechilibrului claselor).
+Performanța va fi evaluată folosind \textbf{ROC-AUC} (capacitatea de a distinge clasele) și \textbf{F1-Score} (armonizarea între precizie și recall, crucială datorită dezechilibrului claselor).
 
 \section{Metodologia Experimentală și Validarea}
 
@@ -104,34 +99,47 @@ Pentru antrenarea și validarea modelelor, se vor utiliza următoarele surse de 
     \item \textbf{Date clinice:} Vârsta și Genul pacienților (anonimizate), precum și etichetele de \textit{Ground Truth} obținute prin biopsie IHC și secvențiere pentru markerii EGFR, KRAS, ALK și expresia PD-L1. Datele vor reflecta dezechilibrul natural al claselor în cancerele pulmonare (ex. mutațiile ALK având o prevalență scăzută, de obicei sub 5-8\%).
 \end{itemize}
 
+\todo{Verificați în setul de date descărcat câți pacienți au efectiv CT, PET și fiecare etichetă (EGFR, KRAS, ALK). Expresia PD-L1 și ROS1 s-ar putea să nu fie disponibile în NSCLC-Radiogenomics; actualizați lista de biomarkeri în funcție de ce conține setul. Adăugați un tabel cu numărul de cazuri pozitive/negative/lipsă pentru fiecare biomarker.}
+
 \subsection{Metodologia experimentală}
 Experimentele au fost concepute pentru a răspunde la două întrebări principale: 
 1) Cât de eficient poate gestiona arhitectura deep learning datele multimodale complexe? 
 2) Adăugarea datelor tabulare aduce o îmbunătățire statistic semnificativă față de utilizarea exclusivă a imaginilor?
-Parametrii 3D ResNet-50: Batch size de 16, antrenat timp de 100 de epoci, cu un mecanism de \textit{Early Stopping} setat la 15 epoci de stagnare pe setul de validare. Setul a fost împărțit 70\% antrenare, 15\% validare, 15\% testare.
+Parametrii planificați pentru rețeaua 3D: Batch size de 16, antrenare timp de maximum 100 de epoci, cu un mecanism de \textit{Early Stopping} setat la 15 epoci de stagnare pe setul de validare. Împărțirea datelor se va face la nivel de pacient (un pacient nu apare niciodată în două subseturi), stratificat după etichete.
+
+\todo{Cu aproximativ 200 de pacienți, o împărțire 70/15/15 lasă circa 30 de pacienți în setul de test (posibil 0--1 cazuri ALK pozitive). Decideți între această împărțire și validarea încrucișată stratificată (k-fold) și justificați alegerea.}
 
 \subsection{Rezultatele obținute}
-Performanțele pe setul de testare independent sunt sumarizate mai jos:
+\todo{Nu există încă rezultate experimentale. Completați tabelul de mai jos doar cu valori obținute din rulări reale, raportând media și intervalul de încredere (bootstrap) pentru fiecare biomarker, precum și numărul de cazuri pozitive din setul de test.}
 
 \begin{table}[h]
 \centering
-\begin{tabular}{@{}lcc@{}}
+\begin{tabular}{@{}lccc@{}}
 \toprule
-\textbf{Biomarker} & \textbf{AUC} & \textbf{F1-Score} \\ \midrule
-\textbf{EGFR} & \textbf{0.87} & 0.78 \\
-\textbf{KRAS} & \textbf{0.84} & 0.75 \\
-\textbf{ALK} & \textbf{0.91} & 0.62 \\
-\textbf{PD-L1} & \textbf{0.89} & 0.81 \\ \bottomrule
+\textbf{Biomarker} & \textbf{AUC (IÎ 95\%)} & \textbf{F1-Score} & \textbf{Nr. pozitivi (test)} \\ \midrule
+\textbf{EGFR} & -- & -- & -- \\
+\textbf{KRAS} & -- & -- & -- \\
+\textbf{ALK} & -- & -- & -- \\
+\textbf{PD-L1} & -- & -- & -- \\ \bottomrule
 \end{tabular}
-\caption{Performanța arhitecturii Late-Fusion CNN pe setul de testare.}
+\caption{Performanța arhitecturii Late-Fusion CNN pe setul de testare (de completat).}
 \end{table}
 
 \subsection{Analiza statistică și Studii de Ablație}
-Performanța generală (media AUC de 0.87) demonstrează robustețea modelului. Algoritmul a demonstrat o acuratețe excelentă la identificarea ALK, validând utilitatea funcției \textit{Focal Loss} în gestionarea claselor dezechilibrate.
+\textbf{Studiul de ablație} va compara următoarele variante, pentru a răspunde la a doua întrebare de cercetare:
+\begin{itemize}
+    \item Model doar pe imagini (CT + PET, fără date tabulare);
+    \item Model doar pe date tabulare (Vârstă, Gen);
+    \item Model doar CT vs. CT + PET (contribuția PET);
+    \item Modelul complet Late-Fusion.
+\end{itemize}
 
-\textbf{Studiul de ablație} a validat componentele arhitecturii noastre:
+\todo{Completați rezultatele ablației și testul statistic folosit pentru a compara variantele (ex. testul DeLong pentru AUC).}
+
 \section{Concluzii și posibile îmbunătățiri}
-Proiectul demonstrează cu succes viabilitatea sistemelor de biopsie virtuală. Modelul 3D CNN Late-Fusion dovedește că rețelele profunde pot capta subtilități spațiale complexe ce corelează radiologia cu genomica, oferind o performanță ridicată în predicția biomarkerilor tumorali. 
+\todo{Concluziile se vor scrie după obținerea rezultatelor experimentale.}
+
+Proiectul propune un sistem de biopsie virtuală bazat pe o arhitectură 3D CNN Late-Fusion, cu scopul de a evalua dacă rețelele profunde pot capta din imagistica CT/PET trăsături corelate cu profilul genomic al tumorii.
 
 \textbf{Posibile îmbunătățiri:} Integrarea unor arhitecturi de tip \textit{Vision Transformer 3D} pentru a capta relațiile globale din imagini mai bine decât convoluțiile. De asemenea, extinderea setului de date printr-o abordare multi-centrică (date de la mai multe spitale) ar spori robustețea modelului la diferite echipamente de scanare.
 
@@ -139,20 +147,12 @@ Proiectul demonstrează cu succes viabilitatea sistemelor de biopsie virtuală. 
 
 \begin{thebibliography}{9}
 
-\bibitem{wang2022}
-Wang, J., et al. (2022). 
-\textit{Deep learning based on CT imaging for predicting EGFR mutation status in non-small cell lung cancer}. 
-Lung Cancer Research, 14(2), 112-125.
+\bibitem{bakr2018}
+Bakr, S., Gevaert, O., Echegaray, S., et al. (2018).
+\textit{A radiogenomic dataset of non-small cell lung cancer}.
+Scientific Data, 5, 180202. \url{https://doi.org/10.1038/sdata.2018.202}
 
-\bibitem{perez2023}
-Perez, M., et al. (2023). 
-\textit{Multimodal PET/CT fusion models for the non-invasive assessment of PD-L1 expression}. 
-Journal of Medical Artificial Intelligence, 8(4), 45-56.
-
-\bibitem{chen2023}
-Chen, L., et al. (2023). 
-\textit{Multi-task learning frameworks for comprehensive radiogenomic profiling in oncology}. 
-IEEE Transactions on Medical Imaging, 42(1), 88-99.
+% TODO: adăugați aici referințele reale pentru secțiunea Related Work.
 
 \end{thebibliography}
 
