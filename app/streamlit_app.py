@@ -19,12 +19,20 @@ import streamlit as st
 from pulmognosis.data.dicom import SeriesInfo, pick_series, scan_folder
 from pulmognosis.data.synthetic import write_demo_case
 from pulmognosis.inference import PlaceholderPredictor, Predictor
-from pulmognosis.pipeline import SEX_CHOICES, SMOKING_CHOICES, ClinicalData, prepare_case
+from pulmognosis.pipeline import (
+    MODEL_PATCH_MM,
+    MODEL_PATCH_SIZE,
+    MODEL_SPACING_MM,
+    SEX_CHOICES,
+    SMOKING_CHOICES,
+    ClinicalData,
+    extract_model_patch,
+    prepare_case,
+)
 from pulmognosis.preprocessing.intensity import WINDOWS
-from pulmognosis.preprocessing.spatial import crop_patch, to_array
+from pulmognosis.preprocessing.spatial import to_array
 from rendering import PLANES, patch_figure, slice_figure
 
-PATCH_SIZE = 64
 STEPS = (
     "1 · Încărcare",
     "2 · Vizualizare CT + PET",
@@ -47,7 +55,7 @@ def get_predictor() -> Predictor:
 def reset_from(step: str) -> None:
     """Clear everything computed at or after `step`, so stale results never show."""
     keys = {
-        "case": ["case", "ct", "pet", "dicom_header", "clinical", "location"],
+        "case": ["case", "ct", "pet", "dicom_header", "clinical", "location", "patch_cache"],
         "clinical": ["clinical"],
         "location": ["location"],
     }[step]
@@ -63,6 +71,16 @@ def demo_case_folder() -> str:
 @st.cache_data(show_spinner=False)
 def scan(folder: str) -> list[SeriesInfo]:
     return scan_folder(folder)
+
+
+def model_patch(center_zyx):
+    """The classifier's input cube, cached per centre so slider moves elsewhere stay fast."""
+    cache = st.session_state.setdefault("patch_cache", {})
+    key = tuple(int(c) for c in center_zyx)
+    if key not in cache:
+        cache.clear()
+        cache[key] = extract_model_patch(st.session_state.case, key)
+    return cache[key]
 
 
 def extract_zip(uploaded) -> str:
@@ -138,7 +156,7 @@ def step_upload() -> None:
 
     if st.button("Pregătește cazul", type="primary"):
         reset_from("case")
-        with st.spinner("Conversie HU / SUV, resampling la 1 mm și alinierea PET pe CT…"):
+        with st.spinner("Conversie HU / SUV și alinierea PET pe CT…"):
             case = prepare_case(ct, pet)
         st.session_state.case = case
         st.session_state.ct = to_array(case.ct)
@@ -148,8 +166,9 @@ def step_upload() -> None:
     if "case" in st.session_state:
         case = st.session_state.case
         z, y, x = st.session_state.ct.shape
+        sx, sy, sz = case.spacing_xyz
         st.success(
-            f"Caz pregătit: volum {x}×{y}×{z} voxeli la 1 mm, "
+            f"Caz pregătit: CT {x}×{y}×{z} voxeli la rezoluția originală ({sx:.2f} × {sy:.2f} × {sz:.2f} mm), "
             + ("cu PET aliniat." if case.has_pet else "fără PET.")
             + " Continuați cu pasul 2."
         )
@@ -181,11 +200,13 @@ def step_view() -> None:
             opacity, suv_min, suv_top = 0.0, 0.0, 1.0
             st.info("Acest caz nu are PET.")
         st.metric("SUV maxim", f"{pet.max():.1f}" if pet is not None else "—")
-        st.caption("Voxeli de 1 × 1 × 1 mm după resampling.")
+        sx, sy, sz = st.session_state.case.spacing_xyz
+        st.caption(f"Rezoluția originală a CT-ului: {sx:.2f} × {sy:.2f} mm în plan, secțiuni de {sz:.2f} mm.")
 
     with left:
         plane, index = view_controls("view", ct.shape)
-        fig = slice_figure(ct, plane, index, WINDOW_LABELS[win_label], pet, opacity, suv_min, suv_top, size=6.5)
+        fig = slice_figure(ct, plane, index, WINDOW_LABELS[win_label], pet, opacity, suv_min, suv_top,
+                           spacing_xyz=st.session_state.case.spacing_xyz, size=6.5)
         st.pyplot(fig, width="content")
         plt.close(fig)
 
@@ -220,6 +241,7 @@ def step_clinical() -> None:
 def step_localise() -> None:
     st.header("4 · Localizarea tumorii")
     ct, pet = st.session_state.ct, st.session_state.pet
+    case = st.session_state.case
     predictor = get_predictor()
 
     if "location" not in st.session_state:
@@ -228,7 +250,8 @@ def step_localise() -> None:
 
     st.write(
         f"Metodă: **{loc.method}**. În versiunea finală, această etapă va fi făcută de modelul 3D U-Net (Etapa 1 a pipeline-ului). "
-        f"Puteți ajusta manual centrul; caseta arată regiunea de {PATCH_SIZE}³ voxeli trimisă clasificatorului."
+        f"Puteți ajusta manual centrul; caseta arată cubul de {MODEL_PATCH_MM:.0f} mm trimis clasificatorului "
+        f"({MODEL_PATCH_SIZE}³ voxeli de {MODEL_SPACING_MM} mm)."
     )
 
     z0, y0, x0 = loc.center_zyx
@@ -244,14 +267,15 @@ def step_localise() -> None:
     cols = st.columns(3)
     for col, plane in zip(cols, PLANES):
         with col:
-            fig = slice_figure(ct, plane, center[PLANES[plane]], WINDOWS["lung"], pet, 0.45, 2.0, max(float(pet.max()), 2.1) if pet is not None else 10.0,
-                               center_zyx=center, box_size=PATCH_SIZE, title=plane, size=4)
+            fig = slice_figure(ct, plane, center[PLANES[plane]], WINDOWS["lung"], pet, 0.45, 2.0,
+                               max(float(pet.max()), 2.1) if pet is not None else 10.0,
+                               spacing_xyz=case.spacing_xyz, center_zyx=center, box_mm=MODEL_PATCH_MM,
+                               title=plane, size=4)
             st.pyplot(fig, width="stretch")
             plt.close(fig)
 
-    st.subheader("Regiunea decupată")
-    ct_patch = crop_patch(ct, center, PATCH_SIZE, fill=-1000.0)
-    pet_patch = crop_patch(pet, center, PATCH_SIZE, fill=0.0) if pet is not None else None
+    st.subheader(f"Intrarea modelului: {MODEL_PATCH_SIZE}³ voxeli de {MODEL_SPACING_MM} mm")
+    ct_patch, pet_patch = model_patch(center)
     fig = patch_figure(ct_patch, pet_patch, WINDOWS["lung"])
     st.pyplot(fig, width="content")
     plt.close(fig)

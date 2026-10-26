@@ -82,7 +82,7 @@ recitirea descrierii plastice și formale (există deja).
 | Săpt. | R1 | R2 | R3 |
 |---|---|---|---|
 | **S2** | Descărcarea lotului 1 NSCLC-Radiogenomics (~30 pacienți: CT + PET + SEG). Conversie HU/SUV cu teste unitare | **Regresie logistică clinică** (vârstă, gen, fumat → EGFR/KRAS) pe toți cei 211 pacienți — nu are nevoie de imagini. Cadrul de evaluare: fold-uri stratificate la nivel de pacient, AUC + bootstrap | **CNN 2D pe Kaggle** (histologie, *small data*), cu limitările documentate. Descărcarea unui subset LIDC (~100 pacienți) |
-| **S3** | Resampling, co-registrare CT–PET, decupare patch 64³ pentru lotul 1. Notebook de verificare vizuală | **Primul model 3D** (3D ResNet-18, doar CT, histologie) pe lotul mic → rezultate „small data" | Măști 3D din contururile LIDC (`pylidc`); primul U-Net de test (verifică memoria GPU) |
+| **S3** | Co-registrare CT–PET, extragerea cubului 128³ (0,75 mm) pentru lotul 1. Notebook de verificare vizuală | **Primul model 3D** (3D ResNet-18, doar CT, histologie) pe lotul mic → rezultate „small data" | Măști 3D din contururile LIDC (`pylidc`); primul U-Net de test (verifică memoria GPU) |
 
 **Raport:** descrierea algoritmului (CNN 2D, ResNet 3D, regresie logistică), metodologia, rezultatele pe date puține.
 
@@ -157,7 +157,7 @@ Fiecare îmbunătățire se măsoară față de versiunea din Etapa 3 (**ablați
 
 | Resursă | Folosire |
 |---|---|
-| Laptop cu RTX 3060 (6 GB VRAM), 16 GB RAM | Preprocesare, Etapa 2 (patch-uri 64³ încap ușor), teste U-Net, aplicația |
+| Laptop cu RTX 3060 (6 GB VRAM), 16 GB RAM | Preprocesare, Etapa 2 (cuburi 128³: batch 4–8 cu precizie mixtă), teste U-Net, aplicația |
 | Google Colab / Kaggle Notebooks (GPU gratuit) | Antrenarea U-Net pe LIDC dacă 6 GB nu ajung; rulări paralele ale fold-urilor |
 | Spațiu pe disc | ~29 GB liberi: se descarcă pe loturi, se păstrează doar patch-urile procesate (< 5 GB în total) |
 | Server GPU al facultății | `TODO`: de întrebat coordonatorul dacă există |

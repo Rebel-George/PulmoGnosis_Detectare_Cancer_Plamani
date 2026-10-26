@@ -1,7 +1,7 @@
 import numpy as np
 import SimpleITK as sitk
 
-from pulmognosis.preprocessing.spatial import crop_patch, resample_isotropic, resample_to_reference, to_array
+from pulmognosis.preprocessing.spatial import resample_around, resample_isotropic, resample_to_reference, to_array
 
 
 def _image(array_zyx, spacing_xyz, origin=(0.0, 0.0, 0.0)):
@@ -31,12 +31,17 @@ def test_resample_to_reference_keeps_a_point_at_the_same_physical_location():
     assert out[8, 8, 8] == 10.0  # (z, y, x) index 8 == 8 mm on a 1 mm grid at origin 0
 
 
-def test_crop_patch_centred_and_padded():
-    vol = np.arange(10 * 10 * 10, dtype=float).reshape(10, 10, 10)
-    patch = crop_patch(vol, (5, 5, 5), size=4)
-    assert patch.shape == (4, 4, 4)
-    assert patch[2, 2, 2] == vol[5, 5, 5]
+def test_resample_around_centres_the_cube_on_a_physical_point():
+    vol = np.zeros((40, 40, 40))
+    vol[20, 10, 30] = 100.0  # (z, y, x) → physical (30, 10, 20) mm on a 1 mm grid at origin 0
+    img = _image(vol, (1.0, 1.0, 1.0))
 
-    corner = crop_patch(vol, (0, 0, 0), size=4, fill=-1.0)
-    assert corner[0, 0, 0] == -1.0  # outside the volume → fill
-    assert corner[2, 2, 2] == vol[0, 0, 0]
+    cube = resample_around(img, (30.0, 10.0, 20.0), size=9, spacing_mm=0.5, interpolator=sitk.sitkNearestNeighbor)
+    assert cube.shape == (9, 9, 9)
+    assert cube[4, 4, 4] == 100.0  # the point sits at the cube's centre
+
+
+def test_resample_around_fills_outside_the_image():
+    img = _image(np.zeros((10, 10, 10)), (1.0, 1.0, 1.0))
+    cube = resample_around(img, (0.0, 0.0, 0.0), size=8, spacing_mm=1.0, default_value=-1000.0)
+    assert cube[0, 0, 0] == -1000.0  # 3.5 mm before the origin → outside

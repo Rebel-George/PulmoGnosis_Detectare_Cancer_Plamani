@@ -54,10 +54,10 @@ Aplicația PulmoGnosis se adresează medicilor radiologi și oncologi care evalu
 Aplicația ghidează utilizatorul printr-un flux în cinci pași:
 
 \begin{enumerate}
-    \item \textbf{Încărcarea scanărilor.} Utilizatorul selectează un folder local sau o arhivă ZIP cu fișiere DICOM (sau un caz demonstrativ sintetic). Aplicația identifică automat seriile disponibile (CT, PET), le afișează într-un tabel și propune seria CT și seria PET potrivite. La confirmare, rulează preprocesarea (Etapa 0): conversia CT în unități Hounsfield, conversia PET în SUV pe baza dozei injectate și a greutății pacientului, re-eșantionarea la voxeli de 1~mm și alinierea PET-ului pe CT.
+    \item \textbf{Încărcarea scanărilor.} Utilizatorul selectează un folder local sau o arhivă ZIP cu fișiere DICOM (sau un caz demonstrativ sintetic). Aplicația identifică automat seriile disponibile (CT, PET), le afișează într-un tabel și propune seria CT și seria PET potrivite. La confirmare, rulează preprocesarea (Etapa 0): conversia CT în unități Hounsfield, conversia PET în SUV pe baza dozei injectate și a greutății pacientului și alinierea PET-ului pe grila CT, păstrând rezoluția originală a scanării.
     \item \textbf{Vizualizarea CT + PET.} Volumul poate fi parcurs secțiune cu secțiune în planurile axial, coronal și sagital, cu ferestre CT predefinite (plămân, mediastin). Harta PET este suprapusă peste CT cu opacitate și interval SUV reglabile, pentru a evidenția zonele cu activitate metabolică crescută.
     \item \textbf{Date clinice.} Utilizatorul completează vârsta, genul și statutul de fumător; vârsta și genul sunt pre-completate din antetul DICOM când sunt disponibile.
-    \item \textbf{Localizarea tumorii.} Aplicația propune centrul tumorii și afișează, în cele trei planuri, regiunea cubică de $64^3$ voxeli care va fi trimisă clasificatorului. Utilizatorul poate corecta manual poziția. În versiunea finală, propunerea este făcută de modelul de segmentare 3D U-Net (Etapa 1 a pipeline-ului).
+    \item \textbf{Localizarea tumorii.} Aplicația propune centrul tumorii și afișează, în cele trei planuri, cubul de 96~mm care va fi trimis clasificatorului ($128^3$ voxeli de 0,75~mm, aproape de rezoluția originală a CT-ului). Utilizatorul poate corecta manual poziția. În versiunea finală, propunerea este făcută de modelul de segmentare 3D U-Net (Etapa 1 a pipeline-ului).
     \item \textbf{Rezultate.} Un panou afișează probabilitățile pentru tipul histologic (adenocarcinom, carcinom scuamos, carcinom cu celule mici) și pentru mutațiile EGFR și KRAS, datele folosite și, în versiunea finală, harta Grad-CAM care arată regiunile care au influențat predicția.
 \end{enumerate}
 
@@ -70,7 +70,7 @@ Aplicația ghidează utilizatorul printr-un flux în cinci pași:
 \toprule
 \textbf{Funcționalitate} & \textbf{Descriere} & \textbf{Stare} \\ \midrule
 Încărcare DICOM & Folder local, arhivă ZIP, caz demonstrativ; detectarea automată a seriilor & Implementat \\
-Preprocesare (Etapa 0) & HU, SUV, re-eșantionare 1~mm, aliniere PET--CT & Implementat, cu teste unitare \\
+Preprocesare (Etapa 0) & HU, SUV, aliniere PET--CT la rezoluția nativă, cub $128^3$ la 0,75~mm & Implementat, cu teste unitare \\
 Vizualizare CT + PET & Trei planuri, ferestre CT, suprapunere PET reglabilă & Implementat \\
 Date clinice & Formular cu pre-completare din DICOM & Implementat \\
 Localizarea tumorii & Propunere automată + corecție manuală, previzualizarea regiunii decupate & Euristică temporară (maximul SUV); 3D U-Net planificat \\
@@ -96,7 +96,7 @@ Pentru a evita orice confuzie, cât timp modelul nu este antrenat, panoul de rez
 \subsection{Descrierea problemei științifice}
 \textbf{Descrierea formală:} Problema este descompusă în două sub-probleme.
 
-\textit{Etapa 1 -- segmentare.} Fiind dat un volum CT preprocesat $V \in \mathbb{R}^{D \times H \times W}$, se învață o funcție $g: V \mapsto M \in [0,1]^{D \times H \times W}$ care atribuie fiecărui voxel probabilitatea de a aparține tumorii. Din masca binarizată se extrage centrul tumorii, în jurul căruia se decupează un patch $X_{img} \in \mathbb{R}^{2 \times 64 \times 64 \times 64}$ (canalul 1: CT în HU normalizate, canalul 2: PET în SUV normalizat).
+\textit{Etapa 1 -- segmentare.} Fiind dat un volum CT preprocesat $V \in \mathbb{R}^{D \times H \times W}$, se învață o funcție $g: V \mapsto M \in [0,1]^{D \times H \times W}$ care atribuie fiecărui voxel probabilitatea de a aparține tumorii. Din masca binarizată se extrage centrul tumorii, în jurul căruia se extrage un cub de 96~mm re-eșantionat la voxeli de 0,75~mm, $X_{img} \in \mathbb{R}^{2 \times 128 \times 128 \times 128}$ (canalul 1: CT în HU normalizate, canalul 2: PET în SUV normalizat).
 
 \textit{Etapa 2 -- clasificare multimodală multi-task.} Fiind date patch-ul $X_{img}$ și vectorul clinic $X_{tab} \in \mathbb{R}^{K}$ (vârstă normalizată, gen și statut de fumător codificate \textit{one-hot}), se învață o funcție
 \[
@@ -120,9 +120,9 @@ unde $m \in \{0,1\}$ indică dacă eticheta respectivă este cunoscută pentru p
 \vspace{0.2cm}\\
 1. \textbf{Date de intrare:} [CT 3D + PET 3D (opțional)] \quad \& \quad [Vârstă, gen, fumat]\\
 $\downarrow$\\
-2. \textbf{Etapa 0 -- Preprocesare:} [DICOM $\rightarrow$ HU / SUV] $\rightarrow$ [Resampling 1 mm$^3$] $\rightarrow$ [Co-registrare CT--PET]\\
+2. \textbf{Etapa 0 -- Preprocesare:} [DICOM $\rightarrow$ HU / SUV] $\rightarrow$ [Co-registrare PET pe grila CT nativă]\\
 $\downarrow$\\
-3. \textbf{Etapa 1 -- Localizare:} [3D U-Net $\rightarrow$ mască tumorală] $\rightarrow$ [Patch 3D CT+PET, $64^3$]\\
+3. \textbf{Etapa 1 -- Localizare:} [3D U-Net $\rightarrow$ mască tumorală] $\rightarrow$ [Cub CT+PET, $128^3$ la 0,75 mm]\\
 $\downarrow$\\
 4. \textbf{Etapa 2 -- Extragere trăsături:} [3D ResNet-18 pre-antrenat $\rightarrow$ vector 512D] \quad [MLP $\rightarrow$ vector clinic 32D]\\
 $\downarrow$\\
@@ -183,7 +183,7 @@ Resurse de calcul & GPU local (6~GB), Google Colab / Kaggle & Antrenare locală;
 \begin{itemize}
     \item \textbf{CT:} conversia valorilor brute în unități Hounsfield (HU) folosind parametrii \textit{RescaleSlope} și \textit{RescaleIntercept} din DICOM; ferestruire la $[-1000, 400]$ HU și scalare la $[0,1]$.
     \item \textbf{PET:} conversia în SUV (\textit{Standardized Uptake Value}), folosind doza injectată, timpul de la injectare și greutatea pacientului.
-    \item \textbf{Resampling} la voxeli izotropi de $1 \times 1 \times 1$ mm (grosimea secțiunilor variază între 0,625 și 5 mm între scanere).
+    \item \textbf{Rezoluție nativă:} volumul CT este păstrat la rezoluția originală (tipic aproximativ 0,7~mm în plan) pentru vizualizare și localizare; doar regiunea tumorală este re-eșantionată pentru model (vezi Etapa 1).
     \item \textbf{Co-registrare:} PET-ul (aproximativ 4 mm/pixel) este aliniat și re-eșantionat în spațiul CT, folosind SimpleITK.
 \end{itemize}
 
@@ -191,7 +191,7 @@ Resurse de calcul & GPU local (6~GB), Google Colab / Kaggle & Antrenare locală;
 \begin{itemize}
     \item \textbf{Model:} 3D U-Net \cite{cicek2016}, implementat în MONAI sau configurat automat cu nnU-Net \cite{isensee2021}.
     \item \textbf{Antrenare:} pre-antrenare pe LIDC-IDRI (contururile radiologilor, extrase cu \textit{pylidc} \cite{hancock2016}), urmată de ajustare fină pe cele 144 de măști tumorale din NSCLC-Radiogenomics și pe casetele din Lung-PET-CT-Dx, deoarece tumorile NSCLC sunt în general mai mari decât nodulii de screening din LIDC-IDRI.
-    \item \textbf{Ieșire:} mască 3D și un patch de $64^3$ voxeli centrat pe tumoră, extras din CT și PET.
+    \item \textbf{Ieșire:} mască 3D și un cub de 96~mm centrat pe tumoră, re-eșantionat direct din grilele native ale CT-ului și PET-ului la $128^3$ voxeli izotropi de 0,75~mm. Dimensiunea fixă este necesară rețelei; latura de 96~mm cuprinde și tumorile mari, iar pasul de 0,75~mm păstrează detaliile de textură apropiate de rezoluția originală. Costul suplimentar de memorie față de un cub de $64^3$ este gestionat prin precizie mixtă și batch-uri mici.
 \end{itemize}
 
 \subsection{Etapa 2 -- Clasificare multimodală multi-task (Late-Fusion)}

@@ -33,13 +33,13 @@ flowchart LR
 
     subgraph E0[Etapa 0 · Preprocesare]
         P1[DICOM → HU / SUV]
-        P2[Resampling 1 mm³]
-        P3[Co-registrare CT ↔ PET]
+        P2[CT la rezoluția nativă]
+        P3[Co-registrare PET pe grila CT]
     end
 
     subgraph E1[Etapa 1 · Localizarea tumorii]
         SEG[3D U-Net → mască tumorală]
-        CROP[Decupare patch 3D CT+PET]
+        CROP[Cub CT+PET 128³ · 0,75 mm]
     end
 
     subgraph E2[Etapa 2 · Biologia tumorii]
@@ -63,8 +63,8 @@ flowchart LR
 
 | Componentă | Ce face | Antrenată pe | Rezultat |
 |---|---|---|---|
-| **Etapa 0** — Preprocesare | Aduce toate scanările la aceeași scară și aliniază CT cu PET | — (algoritmic, fără învățare) | Volume CT + PET aliniate, 1 mm/voxel |
-| **Etapa 1** — Localizare | Găsește tumora și o decupează | LIDC-IDRI, apoi ajustat pe NSCLC-Radiogenomics + Lung-PET-CT-Dx | Mască 3D + patch 64³ în jurul tumorii |
+| **Etapa 0** — Preprocesare | Convertește intensitățile și aliniază PET-ul pe CT, păstrând rezoluția originală | — (algoritmic, fără învățare) | CT (HU) + PET (SUV) aliniate, la rezoluția nativă a scanării |
+| **Etapa 1** — Localizare | Găsește tumora și o decupează | LIDC-IDRI, apoi ajustat pe NSCLC-Radiogenomics + Lung-PET-CT-Dx | Mască 3D + cub de 96 mm (128³ voxeli de 0,75 mm) în jurul tumorii |
 | **Etapa 2** — Clasificare | Estimează histologia și mutațiile | Lung-PET-CT-Dx + NSCLC-Radiogenomics | Probabilități + hartă Grad-CAM |
 
 ---
@@ -120,8 +120,8 @@ Toate seturile sunt publice, anonimizate și descărcabile din **TCIA** (*The Ca
 |---|---|---|
 | **Conversie CT → HU** | *Unități Hounsfield*: scară standard de densitate (aer ≈ −1000, apă = 0, os ≈ +1000) | Valorile brute diferă între scanere |
 | **Conversie PET → SUV** | *Standardized Uptake Value*: captarea de glucoză corectată pentru doză și greutatea pacientului | Altfel un pacient mai greu ar părea că are o tumoră „mai puțin activă" |
-| **Resampling** | Toate volumele aduse la voxeli de 1×1×1 mm (*voxel* = pixel 3D) | Scanerele au grosimi de secțiune între 0,6 și 5 mm |
-| **Co-registrare** | Alinierea PET (≈4 mm/pixel) peste CT (≈1 mm/pixel) | Același voxel trebuie să fie același punct din corp în ambele imagini |
+| **Rezoluție nativă** | CT-ul este păstrat la rezoluția originală (tipic ~0,7 mm în plan; *voxel* = pixel 3D) pentru vizualizare și localizare | Nu se pierde niciun detaliu înainte de a ști unde este tumora |
+| **Co-registrare** | Alinierea PET (≈4 mm/pixel) pe grila CT (≈0,7 mm/pixel), prin coordonatele fizice din DICOM | Același voxel trebuie să fie același punct din corp în ambele imagini |
 | **Ferestruire și normalizare** | CT tăiat la [−1000, 400] HU și scalat la [0, 1]; SUV normalizat | Rețelele învață mai stabil pe valori în interval mic |
 
 ### Etapa 1 — Localizarea tumorii (segmentare)
@@ -134,7 +134,9 @@ Toate seturile sunt publice, anonimizate și descărcabile din **TCIA** (*The Ca
   2. **ajustare fină** (*fine-tuning* — continuarea antrenării pe date mai apropiate de sarcina finală)
      pe cele 144 de măști din NSCLC-Radiogenomics și pe casetele din Lung-PET-CT-Dx, pentru că
      tumorile NSCLC sunt de obicei mai mari decât nodulii de screening din LIDC.
-- **Ieșire:** mască 3D + un **patch** (cub de 64×64×64 voxeli) centrat pe tumoră, din CT și PET.
+- **Ieșire:** mască 3D + un **cub** de 96 mm centrat pe tumoră, re-eșantionat la **128×128×128 voxeli de 0,75 mm**
+  (aproape de rezoluția originală a CT-ului), separat din CT și din PET. Dimensiunea fixă e necesară pentru
+  rețea; 96 mm acoperă și tumorile mari, iar 0,75 mm păstrează textura fină.
 - **Evaluare:** **scor Dice** (cât se suprapune conturul prezis cu cel real: 0 = deloc, 1 = perfect)
   și **sensibilitate** (ce procent din tumori sunt găsite).
 - **Scurtătură pentru dezvoltare:** pentru pacienții care au deja mască sau casetă, Etapa 2 poate
@@ -143,7 +145,7 @@ Toate seturile sunt publice, anonimizate și descărcabile din **TCIA** (*The Ca
 ### Etapa 2 — Biologia tumorii (clasificare multimodală, multi-task)
 
 ```
-patch CT+PET (2 canale, 64³) ──► 3D ResNet-18 (pre-antrenat) ──► vector imagine (512)
+cub CT+PET (2 canale, 128³) ──► 3D ResNet-18 (pre-antrenat) ──► vector imagine (512)
                                                                          │
 vârstă, gen, fumat ────────────► MLP ───────────────────────► vector clinic (32)
                                                                          │

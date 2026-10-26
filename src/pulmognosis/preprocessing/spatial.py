@@ -1,4 +1,4 @@
-"""Spatial operations: resampling, CT-PET alignment, patch cropping."""
+"""Spatial operations: resampling, CT-PET alignment, extracting the model's input cube."""
 
 from __future__ import annotations
 
@@ -44,20 +44,32 @@ def resample_to_reference(
     return sitk.Resample(moving, reference, sitk.Transform(), interpolator, default_value, moving.GetPixelID())
 
 
+def resample_around(
+    image: sitk.Image,
+    center_mm: tuple[float, float, float],
+    size: int,
+    spacing_mm: float,
+    direction: tuple[float, ...] | None = None,
+    interpolator: int = sitk.sitkLinear,
+    default_value: float = 0.0,
+) -> np.ndarray:
+    """Cube of `size`³ voxels of `spacing_mm`, centred on a physical point, as a (z, y, x) array.
+
+    Works directly from the image's native grid, so CT and PET are each
+    interpolated only once. Regions outside the image get `default_value`.
+    """
+    direction = direction or image.GetDirection()
+    axes = np.array(direction, dtype=float).reshape(3, 3)
+    half_extent = (size - 1) / 2 * spacing_mm
+    origin = np.array(center_mm) - axes @ np.full(3, half_extent)
+
+    reference = sitk.Image([size] * 3, image.GetPixelID())
+    reference.SetSpacing((spacing_mm,) * 3)
+    reference.SetDirection(direction)
+    reference.SetOrigin(tuple(origin))
+    return to_array(resample_to_reference(image, reference, interpolator, default_value))
+
+
 def to_array(image: sitk.Image) -> np.ndarray:
     """SimpleITK image as a numpy array indexed (z, y, x)."""
     return sitk.GetArrayFromImage(image)
-
-
-def crop_patch(volume: np.ndarray, center_zyx: tuple[int, int, int], size: int = 64, fill: float = 0.0) -> np.ndarray:
-    """Cube of side `size` centred on `center_zyx`, padded with `fill` at the borders."""
-    half = size // 2
-    patch = np.full((size, size, size), fill, dtype=volume.dtype)
-    src, dst = [], []
-    for c, dim in zip(center_zyx, volume.shape):
-        start = int(c) - half
-        lo, hi = max(start, 0), min(start + size, dim)
-        src.append(slice(lo, hi))
-        dst.append(slice(lo - start, hi - start))
-    patch[tuple(dst)] = volume[tuple(src)]
-    return patch

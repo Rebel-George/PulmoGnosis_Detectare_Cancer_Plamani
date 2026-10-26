@@ -4,27 +4,28 @@ import numpy as np
 import pytest
 
 from pulmognosis.data.dicom import pick_series, scan_folder
-from pulmognosis.data.synthetic import TUMOUR_CENTER_MM, TUMOUR_SUV, write_demo_case
+from pulmognosis.data.synthetic import TEST, TUMOUR_CENTER_MM, TUMOUR_SUV, write_demo_case
 from pulmognosis.inference import PlaceholderPredictor
-from pulmognosis.pipeline import ClinicalData, prepare_case
+from pulmognosis.pipeline import MODEL_PATCH_SIZE, ClinicalData, extract_model_patch, prepare_case
 from pulmognosis.preprocessing.spatial import to_array
 
 
 @pytest.fixture(scope="module")
 def case(tmp_path_factory):
-    root = write_demo_case(tmp_path_factory.mktemp("demo"))
+    root = write_demo_case(tmp_path_factory.mktemp("demo"), TEST)
     series = scan_folder(root)
     return prepare_case(pick_series(series, "CT"), pick_series(series, "PT"))
 
 
 def test_scan_finds_ct_and_pet(tmp_path):
-    series = scan_folder(write_demo_case(tmp_path))
+    series = scan_folder(write_demo_case(tmp_path, TEST))
     assert {s.modality: s.num_slices for s in series} == {"CT": 60, "PT": 30}
 
 
-def test_ct_is_in_hounsfield_units_on_1mm_grid(case):
+def test_ct_is_in_hounsfield_units_at_native_resolution(case):
     ct = to_array(case.ct)
-    assert case.ct.GetSpacing() == (1.0, 1.0, 1.0)
+    assert case.ct.GetSpacing() == pytest.approx((2.0, 2.0, 2.5))  # TEST phantom's own spacing
+    assert ct.shape == TEST.ct_shape_zyx
     assert np.median(ct[ct < -500]) == pytest.approx(-900, abs=150)  # air and lung
     assert ct.max() > 600  # spine
 
@@ -50,3 +51,14 @@ def test_placeholder_localises_on_the_tumour_and_flags_itself(case):
     prediction = predictor.predict(case, location, ClinicalData(60, "masculin", "fost fumător"))
     assert prediction.is_placeholder
     assert sum(prediction.histology.values()) == pytest.approx(1.0)
+
+
+def test_model_patch_is_128_cube_centred_on_the_tumour(case):
+    center = case.mm_to_index(TUMOUR_CENTER_MM)
+    ct, pet = extract_model_patch(case, center)
+    assert ct.shape == pet.shape == (MODEL_PATCH_SIZE,) * 3
+
+    mid = MODEL_PATCH_SIZE // 2
+    assert pet[mid, mid, mid] == pytest.approx(TUMOUR_SUV, rel=0.05)  # tumour at the centre
+    assert -100 < ct[mid, mid, mid] < 150  # soft tissue, not lung or air
+    assert ct.min() > -1100 and pet.min() >= 0

@@ -56,10 +56,13 @@ class PlaceholderPredictor:
     """
 
     def localise(self, case: Case) -> Localisation:
-        if case.has_pet:
-            suv = ndimage.gaussian_filter(to_array(case.pet), sigma=2)
-            center = np.unravel_index(int(np.argmax(suv)), suv.shape)
-            return Localisation(tuple(int(c) for c in center), "punctul cu SUV maxim (euristică)")
+        if case.pet_native is not None:
+            # Search on the coarse native PET grid (fast), then map the point onto the CT.
+            pet = case.pet_native
+            suv = ndimage.gaussian_filter(to_array(pet), sigma=1)
+            z, y, x = np.unravel_index(int(np.argmax(suv)), suv.shape)
+            point_mm = pet.TransformIndexToPhysicalPoint((int(x), int(y), int(z)))
+            return Localisation(case.mm_to_index(point_mm), "punctul cu SUV maxim (euristică)")
         shape = to_array(case.ct).shape
         return Localisation(tuple(s // 2 for s in shape), "centrul volumului (ajustați manual)")
 
