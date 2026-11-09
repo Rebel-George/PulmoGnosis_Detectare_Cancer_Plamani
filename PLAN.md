@@ -4,7 +4,7 @@ Ghidul complet pentru terminarea proiectului: ce s-a făcut, ce urmează, cum ș
 Este scris astfel încât **o singură persoană** (eventual cu un asistent AI) să poată duce proiectul
 până la capăt doar din acest fișier și din [README.md](README.md).
 
-**Responsabil pentru etapele 2–6:** `TODO (numele colegului)`.
+**Responsabil:** proprietarul repository-ului (toate etapele; antrenarea rulează pe serverul JupyterHub al facultății, în contul propriu).
 Săptămânile sunt numerotate de la **S1 = 26 oct. – 1 nov. 2026**.
 
 > **Terminologie:** **„Etapa 1–6"** = etapele de evaluare de la laborator (Lab 2 – Lab 7).
@@ -206,7 +206,7 @@ Verificați spațiul cu `df -h ~` și `du -sh ~/pulmognosis_data/*`.
 ### 4.1 Mediu și repository
 - **Python 3.12**, mediu în `.venv`:
   `py -3.12 -m venv .venv` → `.venv\Scripts\pip install -r requirements.txt -e .` → `pytest`.
-- **Repository-ul nu are `.gitignore` (intenționat).** Fiecare membru pune regulile **local**, în
+- **Repository-ul nu are `.gitignore` (intenționat).** Regulile se pun **local** (pe laptop și pe server), în
   `.git/info/exclude`, înainte să creeze date:
   ```
   /data/
