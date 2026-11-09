@@ -282,7 +282,33 @@ Experimentele urmăresc trei întrebări de cercetare:
 \textbf{Risc metodologic identificat:} carcinomul cu celule mici apare doar în Lung-PET-CT-Dx, deci un model ar putea învăța să recunoască sursa datelor (scanerul, protocolul) în loc de tipul tumorii. Această clasă va fi evaluată separat, iar comparația adenocarcinom vs. scuamos se va face și între seturi.
 
 \subsection{Rezultatele obținute}
-\todo{Nu există încă rezultate experimentale. Completați tabelele doar cu valori obținute din rulări reale (media pe fold-uri și intervalul de încredere 95\%).}
+
+\subsubsection{Etapa 2: modelul clinic (date puține)}
+
+\textbf{Algoritmul.} Primul model (modelul A) este o regresie logistică ce estimează probabilitatea mutațiilor EGFR și KRAS exclusiv din date clinice: vârsta (standardizată cu media și deviația standard ale pacienților de antrenare din fiecare fold), genul și statutul de fumător (codificate binar; referința este bărbatul nefumător). Pentru fiecare mutație se antrenează o regresie separată, fără ponderarea claselor, astfel încât ieșirea să fie o probabilitate reală; pragul de decizie pentru F1, sensibilitate și specificitate este proporția de mutanți din datele de antrenare ale fold-ului. Modelul nu folosește imagini: el reprezintă nivelul de referință pe care orice model bazat pe imagini trebuie să îl depășească.
+
+\textbf{Date și metodologie.} Toți pacienții NSCLC-Radiogenomics cu eticheta cunoscută (172 pentru EGFR, dintre care 43 mutanți; 171 pentru KRAS, dintre care 38 mutanți); pacienții cu statut necunoscut sau necolectat sunt excluși doar pentru eticheta respectivă. Validare încrucișată în 5 fold-uri la nivel de pacient, stratificată după combinația EGFR $\times$ KRAS, generată o singură dată (\textit{seed} fix) și folosită de toate modelele proiectului; fiecare fold conține 8--10 mutanți EGFR și 7--8 mutanți KRAS. AUC-ul este calculat pe predicțiile \textit{out-of-fold} ale tuturor pacienților, cu interval de încredere 95\% obținut prin bootstrap (2000 de re-eșantionări).
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Mutație} & \textbf{Pacienți / mutanți} & \textbf{AUC (IÎ 95\%)} & \textbf{AUC pe fold-uri} & \textbf{F1} & \textbf{Sens.} & \textbf{Spec.} \ \midrule
+EGFR & 172 / 43 & 0,72 (0,62--0,81) & 0,74 $\pm$ 0,08 & 0,49 & 0,58 & 0,74 \
+KRAS & 171 / 38 & 0,55 (0,45--0,65) & 0,57 $\pm$ 0,15 & 0,33 & 0,61 & 0,41 \ \bottomrule
+\end{tabular}
+\caption{Modelul A (regresie logistică pe vârstă, gen și fumat), validare încrucișată în 5 fold-uri.}
+\end{table}
+
+\textbf{Interpretare.} Pentru EGFR, modelul clinic are o capacitate de discriminare moderată, clar peste nivelul întâmplării. Coeficienții modelului final confirmă relațiile cunoscute clinic: statutul de fost fumător sau fumător actual scade șansele unei mutații EGFR, iar genul feminin le crește. Pentru KRAS, intervalul de încredere include 0,5, deci datele clinice singure nu permit predicția acestei mutații. Aceste valori sunt nivelul de referință pentru modelele bazate pe imagini din etapele următoare.
+
+\textbf{Integrarea în aplicație.} Modelul final, antrenat pe toți pacienții cu etichetă cunoscută, este exportat ca fișier JSON și folosit de aplicație pentru estimarea EGFR și KRAS. Fiecare valoare afișată indică sursa și AUC-ul din validarea încrucișată, iar pentru KRAS aplicația menționează explicit că modelul nu este mai bun decât întâmplarea. Tipul histologic rămâne valoare de referință, marcată vizibil.
+
+\todo{Adăugați rezultatele modelelor B (CNN 2D, Kaggle) și C (3D ResNet-18 pe date puține).}
+
+\subsubsection{Tabele de rezultate (de completat pe parcurs)}
+\todo{Completați tabelele doar cu valori obținute din rulări reale (media pe fold-uri și intervalul de încredere 95\%).}
 
 \begin{table}[h]
 \centering
@@ -302,7 +328,7 @@ NSCLC-Radiogenomics (după ajustare) & -- & -- \\ \bottomrule
 \begin{tabular}{@{}lccc@{}}
 \toprule
 \textbf{Model} & \textbf{Histologie (bal. acc.)} & \textbf{EGFR AUC (IÎ 95\%)} & \textbf{KRAS AUC (IÎ 95\%)} \\ \midrule
-Regresie logistică clinică & -- & -- & -- \\
+Regresie logistică clinică (model A) & n/a & 0,72 (0,62--0,81) & 0,55 (0,45--0,65) \\
 Radiomică + regresie logistică & -- & -- & -- \\
 CNN 2D (Kaggle) & -- & n/a & n/a \\
 Doar imagine (CT) & -- & -- & -- \\

@@ -18,7 +18,7 @@ import streamlit as st
 
 from pulmognosis.data.dicom import SeriesInfo, pick_series, scan_folder
 from pulmognosis.data.synthetic import write_demo_case
-from pulmognosis.inference import PlaceholderPredictor, Predictor
+from pulmognosis.inference import ClinicalPredictor, PlaceholderPredictor, Predictor
 from pulmognosis.pipeline import (
     MODEL_PATCH_MM,
     MODEL_PATCH_SIZE,
@@ -41,14 +41,18 @@ STEPS = (
     "5 · Rezultate",
 )
 WINDOW_LABELS = {"Plămân": WINDOWS["lung"], "Mediastin": WINDOWS["mediastinum"]}
+CLINICAL_MODEL = Path(__file__).resolve().parents[1] / "models" / "clinical_lr.json"
 
 st.set_page_config(page_title="PulmoGnosis", page_icon="🫁", layout="wide")
 
 
 # ---------------------------------------------------------------- state ----
 
+@st.cache_resource
 def get_predictor() -> Predictor:
-    # Replaced by the trained Stage 1 + Stage 2 models in a later stage.
+    # Model A (clinical) when its exported file exists; the image models replace this in later stages.
+    if CLINICAL_MODEL.exists():
+        return ClinicalPredictor.from_file(CLINICAL_MODEL)
     return PlaceholderPredictor()
 
 
@@ -296,17 +300,27 @@ def step_results() -> None:
 
     if prediction.is_placeholder:
         st.error("**DEMO – fără model antrenat.** " + prediction.note, icon="⚠️")
+    else:
+        st.info(prediction.note, icon="ℹ️")
 
+    placeholder = prediction.placeholder_outputs
     left, right = st.columns(2)
     with left:
         st.subheader("Tip histologic")
+        if "histology" in placeholder:
+            st.warning("**DEMO** – valori de referință, identice pentru toți pacienții.", icon="⚠️")
         for name, p in sorted(prediction.histology.items(), key=lambda kv: -kv[1]):
             bar_row(name.capitalize(), p)
+        st.caption(f"Sursa: {prediction.sources.get('histology', '—')}")
     with right:
         st.subheader("Mutații")
+        if {"egfr", "kras"} & placeholder:
+            st.warning("**DEMO** – valori de referință, identice pentru toți pacienții.", icon="⚠️")
         m1, m2 = st.columns(2)
         m1.metric("EGFR mutant", f"{prediction.egfr:.0%}")
         m2.metric("KRAS mutant", f"{prediction.kras:.0%}")
+        st.caption(f"EGFR — sursa: {prediction.sources.get('egfr', '—')}")
+        st.caption(f"KRAS — sursa: {prediction.sources.get('kras', '—')}")
         st.caption("EGFR: candidat pentru terapie țintită cu inhibitori de tirozin-kinază. KRAS: candidat pentru inhibitori KRAS.")
 
     st.subheader("Hartă de atenție (Grad-CAM)")
@@ -341,7 +355,7 @@ with st.sidebar:
     st.divider()
     progress = st.container()
     st.divider()
-    st.caption("Versiune demonstrativă (Etapa 1): flow-ul complet, fără model antrenat.")
+    st.caption("Versiune de lucru (Etapa 2): EGFR/KRAS din modelul clinic; restul ieșirilor sunt încă demonstrative.")
 
 step_index = STEPS.index(step)
 missing = requirements_met(step_index)

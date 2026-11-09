@@ -3,6 +3,7 @@ numpy>=1.26,<3
 scipy>=1.11
 pandas>=2.2
 openpyxl>=3.1
+scikit-learn>=1.4
 
 # Medical imaging
 pydicom>=2.4

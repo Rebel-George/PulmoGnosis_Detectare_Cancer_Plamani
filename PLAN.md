@@ -49,7 +49,7 @@ Săptămânile sunt numerotate de la **S1 = 26 oct. – 1 nov. 2026**.
 | Etapa | Termen | Aplicație | Pct. | Raport | Pct. | Stare |
 |---|---|---|---|---|---|---|
 | **1** | **Lab 2** — S1 (26 oct. – 1 nov.) | Flow-ul de bază | 10 | Funcționalitățile aplicației; descrierea plastică și formală a problemei; *related work*, instrumente și tehnologii | 5 | 🟡 Aproape gata |
-| **2** | **Lab 3** — S3 (9–15 nov.) | Algoritm inteligent + date puține | 5 | Algoritmul, metodologia experimentală, rezultate | 5 | ⬜ |
+| **2** | **Lab 3** — S3 (9–15 nov.) | Algoritm inteligent + date puține | 5 | Algoritmul, metodologia experimentală, rezultate | 5 | 🟡 În lucru (modelul A gata) |
 | **3** | **Lab 4** — S5 (23–29 nov.) | Algoritm inteligent + date reale / *benchmark* | 5 | Metodologie, rezultate, **comparație cu SOTA** (cele mai bune rezultate publicate) | 5 | ⬜ |
 | **4** | **Lab 5** — S7 (7–13 dec.) | Îmbunătățirea algoritmului | 10 | Îmbunătățirile: metodologie, rezultate, analize comparative | 10 | ⬜ |
 | **5** | **Lab 6** — ~S11 (4–10 ian.) | Integrarea modelului în aplicație (5) + noi îmbunătățiri (10) + **teaser video** (5) | 20 | Analiza statistică a rezultatelor (10) + slide-uri, draft (10) | 20 | ⬜ |
@@ -65,7 +65,9 @@ Săptămânile sunt numerotate de la **S1 = 26 oct. – 1 nov. 2026**.
 - **Pachetul `src/pulmognosis/`**: citire DICOM, conversii HU/SUV, alinierea PET pe CT, extragerea cubului
   de intrare al modelului (**128³ voxeli de 0,75 mm**), interfața `Predictor` pentru modele, o fantomă
   sintetică CT + PET scrisă ca DICOM (pentru demo și teste).
-- **21 de teste** (`pytest`).
+- **Etapa 2 (parțial):** tabelul de cohortă, fold-urile comune (`configs/splits/`), evaluarea (AUC + bootstrap) și
+  **modelul A** (regresie logistică clinică → EGFR/KRAS), integrat în aplicație (`models/clinical_lr.json`).
+- **27 de teste** (`pytest`).
 - **Raportul** (`raport_biopsie_virtuala.tex`) cu secțiunile Etapei 1 și cu tabelele de rezultate goale.
 
 ### Ce NU există în repository (se obține local)
@@ -257,7 +259,10 @@ brute. Verificați spațiul liber înainte.
 | `src/pulmognosis/preprocessing/intensity.py` | Ferestre CT, normalizare HU, `suv_scale_factor` (cu corecția dezintegrării, tag-ul Philips, trecerea peste miezul nopții) |
 | `src/pulmognosis/preprocessing/spatial.py` | `resample_isotropic`, `resample_to_reference` (aliniere prin coordonate fizice), `resample_around` (cub centrat pe un punct în mm), `to_array` |
 | `src/pulmognosis/pipeline.py` | `prepare_case` → `Case` (CT nativ în HU, PET în SUV pe grila CT și pe grila proprie); `extract_model_patch` → cubul 128³ CT și PET; `ClinicalData`; constantele cubului |
-| `src/pulmognosis/inference.py` | Protocolul **`Predictor`** (`localise`, `predict`), `Localisation`, `Prediction`, `PlaceholderPredictor` |
+| `src/pulmognosis/inference.py` | Protocolul **`Predictor`** (`localise`, `predict`), `Localisation`, `Prediction` (cu sursa fiecărei ieșiri și lista celor încă *placeholder*), `PlaceholderPredictor`, `ClinicalPredictor` (modelul A) |
+| `src/pulmognosis/data/cohort.py`, `scripts/build_cohort.py` | Tabelul de cohortă NSCLC-Radiogenomics → `data/cohort/nsclc_radiogenomics.csv` |
+| `src/pulmognosis/evaluation/` | `splits.py` (fold-uri stratificate EGFR×KRAS, salvate în `configs/splits/`), `metrics.py` (AUC, F1, sens./spec., IÎ bootstrap) |
+| `src/pulmognosis/classification/clinical.py`, `scripts/train_clinical.py` | Modelul A: validare încrucișată, export JSON în `models/clinical_lr.json`, rezultate în `runs/model_a_clinical/` |
 | `app/streamlit_app.py`, `app/rendering.py` | Aplicația; vorbește cu modelele **doar** prin `get_predictor()` |
 | `tests/` | Teste pentru intensități, geometrie, serii DICOM, pipeline-ul complet pe fantomă |
 
@@ -265,14 +270,13 @@ brute. Verificați spațiul liber înainte.
 
 | Modul | Conținut | Etapa |
 |---|---|---|
-| `src/pulmognosis/data/cohort.py` + `scripts/build_cohort.py` | Tabelul de cohortă (CSV în `data/`): pacient × modalități × etichete | 2 |
 | `src/pulmognosis/data/download.py` + `scripts/download_batch.py` | Descărcare selectivă (`idc-index`) pe loturi | 2 |
 | `src/pulmognosis/data/seg.py` | Citirea DICOM SEG (ex. `highdicom`) → mască 3D → centrul tumorii în mm | 2 |
 | `src/pulmognosis/preprocessing/registration.py` | Registrarea CT (studiul PET) → CT diagnostic; aplicarea transformării pe PET | 3 |
 | `src/pulmognosis/data/lung_pet_ct_dx.py` | Casetele PASCAL VOC → caseta 3D → centrul tumorii | 3 |
 | `scripts/build_cubes.py` | Pacient → `data/processed/<set>/<pacient>.npz` cu `ct` (float16, HU), `pet` (float16, SUV sau lipsă), `center_mm`, `spacing_mm` | 2–3 |
-| `src/pulmognosis/evaluation/` | `splits.py` (fold-uri), `metrics.py` (AUC, F1, sens./spec.), `bootstrap.py` (IÎ), `delong.py` (test DeLong), `report.py` (tabele LaTeX) | 2, 5 |
-| `src/pulmognosis/classification/` | `clinical.py` (model A), `cnn2d.py` (model B), `model3d.py` (3D ResNet-18 + MLP + capete), `dataset.py` (citirea cuburilor + augmentări), `train.py` | 2–4 |
+| `src/pulmognosis/evaluation/` | `delong.py` (test DeLong), `report.py` (tabele LaTeX) | 5 |
+| `src/pulmognosis/classification/` | `cnn2d.py` (model B), `model3d.py` (3D ResNet-18 + MLP + capete), `dataset.py` (citirea cuburilor + augmentări), `train.py` | 2–4 |
 | `src/pulmognosis/segmentation/` | U-Net 3D (antrenare, inferență cu fereastră glisantă) | 4–5 |
 | `src/pulmognosis/explain.py` | Grad-CAM pe clasificator | 5 |
 | `configs/` | YAML pentru experimente + `configs/splits/*.csv` | 2+ |
@@ -319,14 +323,16 @@ Pentru un model nou: scrieți o clasă cu aceste două metode în `src/pulmognos
 | **C** | 3D ResNet-18 (MedicalNet) pe cubul 128³ | **~40 de pacienți** NSCLC-Radiogenomics cu SEG, aleși stratificat după histologie | Adenocarcinom vs. scuamos | ❌ (doar raport) |
 
 **Sarcini, în ordine:**
-1. Mediul, `.git/info/exclude`, metadatele în `data/metadata/` (secțiunile 3.2, 3.3, 4.1).
-2. **Cohorta** (`build_cohort.py`): verificați că obțineți cifrele din secțiunea 3.2 (211 / 144 / 43 din 172).
-3. **Evaluarea** (`evaluation/`): fold-uri stratificate pe pacient, salvate în `configs/splits/`; AUC + bootstrap; metrici.
-4. **Modelul A**: standardizare în interiorul *pipeline*-ului de validare; coeficienții salvați ca JSON mic
-   (pot fi în git — nu sunt date de pacient). Rezultate pe 5 fold-uri cu IÎ.
-5. **Modelul A în aplicație**: clasă nouă `Predictor` — EGFR/KRAS reale, etichetate „model clinic (regresie
-   logistică), antrenat pe N pacienți"; histologia rămâne *placeholder* marcat; localizarea rămâne euristică.
-   Teste pentru noua clasă.
+1. ✅ Mediul, `.git/info/exclude`, metadatele în `data/metadata/` (secțiunile 3.2, 3.3, 4.1).
+2. ✅ **Cohorta** (`python scripts/build_cohort.py`): cifrele din secțiunea 3.2 sunt reproduse exact.
+3. ✅ **Evaluarea** (`evaluation/`): fold-uri stratificate pe pacient (EGFR×KRAS), `configs/splits/nsclc_radiogenomics_5fold.csv`
+   (în git; **nu le regenerați** — toate modelele folosesc aceleași fold-uri); AUC + bootstrap; metrici.
+4. ✅ **Modelul A** (`python scripts/train_clinical.py`): regresie logistică **neponderată** (ieșirea e o
+   probabilitate reală, afișată ca atare în aplicație); pragul de decizie = proporția de mutanți din fold-ul de
+   antrenare. **Rezultate:** EGFR AUC **0,72 (IÎ 95% 0,62–0,81)**, 172 pacienți / 43 mutanți;
+   KRAS AUC **0,55 (0,45–0,65)**, 171 / 38 — KRAS nu e mai bun decât întâmplarea din date clinice.
+5. ✅ **Modelul A în aplicație**: `ClinicalPredictor` — EGFR/KRAS reale, fiecare cu sursa și AUC-ul afișate;
+   histologia rămâne *placeholder* marcat; localizarea rămâne euristică. Teste în `tests/test_stage2.py`.
 6. **Date pentru modelul C**: descărcare pe loturi de 10 a ~40 de pacienți (CT diagnostic + SEG; PET-ul doar
    dacă rămâne timp — vezi Capcana 1); masca SEG → centrul tumorii în mm → `extract_model_patch` → `.npz`;
    notebook de verificare vizuală (tumora e în centrul fiecărui cub).
@@ -345,7 +351,7 @@ Pentru un model nou: scrieți o clasă cu aceste două metode în `src/pulmognos
 
 **Gata când:**
 - [ ] 3 modele antrenate, cu rezultate reale (IÎ 95%, nr. pacienți și pozitivi);
-- [ ] aplicația afișează predicția reală a modelului A, alături de *placeholder*-ele marcate;
+- [x] aplicația afișează predicția reală a modelului A, alături de *placeholder*-ele marcate;
 - [ ] raportul descrie algoritmii, metodologia și rezultatele;
 - [ ] tag `etapa-2`.
 
