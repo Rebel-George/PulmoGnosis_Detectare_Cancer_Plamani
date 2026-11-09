@@ -88,7 +88,12 @@ def extract_model_patch(case: Case, center_zyx) -> tuple[np.ndarray, np.ndarray 
     Both are resampled from their native grids to MODEL_SPACING_MM, aligned
     to the CT's orientation; outside the scan, CT is air (-1000) and PET is 0.
     """
-    center_mm = case.index_to_mm(center_zyx)
+    return extract_model_patch_mm(case, case.index_to_mm(center_zyx))
+
+
+def extract_model_patch_mm(case: Case, center_mm) -> tuple[np.ndarray, np.ndarray | None]:
+    """Same as `extract_model_patch`, centred on a physical point (mm), e.g. a SEG mask's centroid."""
+    center_mm = tuple(float(c) for c in center_mm)
     direction = case.ct.GetDirection()
     ct = resample_around(case.ct, center_mm, MODEL_PATCH_SIZE, MODEL_SPACING_MM, direction, default_value=-1000.0)
     pet = None
