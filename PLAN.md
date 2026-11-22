@@ -582,7 +582,10 @@ laptop: cod + teste (date sintetice) ──commit + push──► GitHub ──g
    git clone https://github.com/Rebel-George/PulmoGnosis_Detectare_Cancer_Plamani.git
    cd PulmoGnosis_Detectare_Cancer_Plamani && git checkout feature/etapa-2
    ```
-3. Deschideți `notebooks/etapa2_jupyterhub.ipynb` și rulați celulele **în ordine**.
+3. Deschideți `notebooks/etapa2_jupyterhub.ipynb`, **alegeți kernel-ul `venv`** (dreapta-sus în bara notebook-ului
+   sau *Kernel → Change Kernel…*) și rulați celulele **în ordine**. Kernel-ul implicit „Python 3 (ipykernel)"
+   folosește Python-ul sistemului, care refuză instalarea de pachete (*externally-managed-environment*).
+   Dacă meniul *File → New* nu oferă *Terminal*, comenzile shell se rulează dintr-o celulă cu `!` în față.
 
 ### 10.2 Ce face notebook-ul (Etapa 2)
 
@@ -618,4 +621,7 @@ pacienți/pozitivi pe fold), `oof.csv` (predicțiile *out-of-fold*), `history.js
 - **Nu se modifică pe server** codul din `src/` sau `scripts/`: modificările se fac pe laptop, se testează, se
   publică și se aduc pe server cu `git pull` (altfel versiunile se despart).
 - Fold-urile (`configs/splits/`) **nu se regenerează** — toate modelele le folosesc pe aceleași.
-- Spațiul se verifică după fiecare descărcare (`df -h ~`).
+- Spațiul se verifică după fiecare descărcare (`df -h ~`). Discul `/bigdata` e **comun tuturor studenților**
+  (fără cotă personală), deci spațiul liber se poate micșora între rulări.
+- Notebook-ul de pe server își salvează rezultatele în fișier; înainte de `git pull` pe server rulați
+  `git checkout -- notebooks/` (rezultatele importante sunt deja în `runs/` și `logs/`).
