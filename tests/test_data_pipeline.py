@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pydicom
 import pytest
 
 from pulmognosis.data.dicom import scan_folder
@@ -70,3 +71,31 @@ def test_build_cubes_reports_patients_without_seg(tmp_path):
     write_demo_case(tmp_path / "no_seg", TEST, with_seg=False)
     with pytest.raises(ValueError, match="no SEG"):
         build.build_one(tmp_path / "no_seg", tmp_path / "x.npz")
+
+
+def test_idc_selection_ignores_ai_masks_added_later():
+    rows = [
+        # R01-001: original expert mask + an AI mask added by an analysis project
+        ("R01-001", "CT", "THORAX", None), ("R01-001", "SEG", "3D Slicer segmentation result", None),
+        ("R01-001", "SEG", "AIMI lung and nodule AI segmentation", "bamf_aimi_annotations"),
+        # R01-002: only an AI mask → not selected at all
+        ("R01-002", "CT", "THORAX", None), ("R01-002", "SEG", "AIMI lung and FDG tumor AI segmentation", "bamf_aimi_annotations"),
+    ]
+    index = pd.DataFrame(rows, columns=["PatientID", "Modality", "SeriesDescription", "analysis_result_id"])
+    index["collection_id"] = "nsclc_radiogenomics"
+    index["SeriesInstanceUID"] = [f"uid{i}" for i in range(len(index))]
+    index["series_size_MB"] = 1.0
+
+    sel = select_nsclc_radiogenomics(index)
+    assert set(sel["PatientID"]) == {"R01-001"}
+    assert list(sel.loc[sel["Modality"] == "SEG", "SeriesDescription"]) == ["3D Slicer segmentation result"]
+
+
+def test_seg_finder_skips_ai_masks(tmp_path):
+    root = write_demo_case(tmp_path, TEST)
+    original = find_seg_files(root)[0]
+    ai = pydicom.dcmread(original)
+    ai.SeriesDescription = "AIMI lung and nodule AI segmentation"
+    ai.save_as(root / "SEG" / "AIMI.dcm")
+    assert find_seg_files(root) == [original]
+    assert len(find_seg_files(root, include_ai=True)) == 2

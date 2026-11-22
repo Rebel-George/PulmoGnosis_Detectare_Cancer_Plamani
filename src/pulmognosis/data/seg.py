@@ -30,18 +30,25 @@ class SegMask:
         return self.bbox_max_mm - self.bbox_min_mm
 
 
-def find_seg_files(root: str | Path) -> list[Path]:
-    """All DICOM files under `root` whose Modality is SEG."""
+def find_seg_files(root: str | Path, include_ai: bool = False) -> list[Path]:
+    """DICOM files under `root` whose Modality is SEG.
+
+    AI-generated masks added to IDC later (SeriesDescription "AIMI …", which also
+    outline the lungs) are skipped unless `include_ai` is True.
+    """
     found = []
     for path in Path(root).rglob("*"):
         if not path.is_file():
             continue
         try:
-            ds = pydicom.dcmread(path, stop_before_pixels=True, specific_tags=["Modality"])
+            ds = pydicom.dcmread(path, stop_before_pixels=True, specific_tags=["Modality", "SeriesDescription"])
         except (pydicom.errors.InvalidDicomError, OSError):
             continue
-        if getattr(ds, "Modality", None) == "SEG":
-            found.append(path)
+        if getattr(ds, "Modality", None) != "SEG":
+            continue
+        if not include_ai and str(getattr(ds, "SeriesDescription", "")).upper().startswith("AIMI"):
+            continue
+        found.append(path)
     return sorted(found)
 
 
