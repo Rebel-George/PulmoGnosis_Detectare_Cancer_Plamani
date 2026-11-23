@@ -25,22 +25,10 @@ import torch
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 
-from pulmognosis.classification.dataset import CubeDataset
+from pulmognosis.classification.dataset import CubeDataset, labelled_patients
 from pulmognosis.classification.model3d import ResNet3DClassifier
 from pulmognosis.evaluation.metrics import binary_metrics, bootstrap_ci
 from pulmognosis.evaluation.splits import DEFAULT_SPLITS, load_splits
-
-HISTOLOGY_LABEL = {"adenocarcinoma": 0.0, "squamous": 1.0}
-
-
-def labelled_patients(cohort: pd.DataFrame, cubes: Path, target: str) -> pd.DataFrame:
-    df = cohort.copy()
-    if target == "histology":
-        df["y"] = df["histology"].map(HISTOLOGY_LABEL)
-    else:  # egfr / kras (later stages)
-        df["y"] = df[target]
-    df["path"] = [cubes / f"{p}.npz" for p in df["patient_id"]]
-    return df[df["y"].notna() & df["path"].map(Path.exists)].reset_index(drop=True)
 
 
 def make_loader(df: pd.DataFrame, args, augment: bool, shuffle: bool, seed: int) -> DataLoader:

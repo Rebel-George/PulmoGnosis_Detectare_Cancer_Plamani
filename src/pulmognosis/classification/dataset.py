@@ -5,10 +5,24 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
 from pulmognosis.preprocessing.intensity import normalize_ct
+
+HISTOLOGY_LABEL = {"adenocarcinoma": 0.0, "squamous": 1.0}  # NOS and other histologies are left out
+
+
+def labelled_patients(cohort: pd.DataFrame, cubes: Path, target: str) -> pd.DataFrame:
+    """Cohort rows that have both a known label `y` for `target` and a cube file (`path`)."""
+    df = cohort.copy()
+    if target == "histology":
+        df["y"] = df["histology"].map(HISTOLOGY_LABEL)
+    else:  # egfr / kras (later stages)
+        df["y"] = df[target]
+    df["path"] = [Path(cubes) / f"{p}.npz" for p in df["patient_id"]]
+    return df[df["y"].notna() & df["path"].map(Path.exists)].reset_index(drop=True)
 
 
 def load_cube(path: str | Path) -> np.ndarray:
