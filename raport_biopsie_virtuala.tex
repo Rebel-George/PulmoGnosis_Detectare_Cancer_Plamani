@@ -76,13 +76,13 @@ Preprocesare (Etapa 0) & HU, SUV, aliniere PET--CT la rezoluția nativă, cub $1
 Vizualizare CT + PET & Trei planuri, ferestre CT, suprapunere PET reglabilă & Implementat \\
 Date clinice & Formular cu pre-completare din DICOM & Implementat \\
 Localizarea tumorii & Propunere automată + corecție manuală, previzualizarea regiunii decupate & Euristică temporară (maximul SUV); 3D U-Net planificat \\
-Predicție histologie, EGFR, KRAS & Panou de rezultate & EGFR, KRAS: modelul clinic (A); histologie: valori de referință până la integrarea modelului C \\
+Predicție histologie, EGFR, KRAS & Panou de rezultate & Implementat: histologie din modelul de imagine C, EGFR și KRAS din modelul clinic A \\
 Hartă Grad-CAM & Explicarea vizuală a predicției & Planificat \\ \bottomrule
 \end{tabular}
 \caption{Funcționalitățile aplicației și stadiul lor de implementare.}
 \end{table}
 
-EGFR și KRAS sunt estimate de modelul clinic (modelul A, descris la rezultatele Etapei 2), iar fiecare valoare indică sursa și AUC-ul din validarea încrucișată. Pentru a evita orice confuzie, ieșirile care nu provin încă dintr-un model antrenat (în prezent, tipul histologic) sunt marcate cu un avertisment vizibil (\textit{„DEMO''}) și afișează prevalențele etichetelor din seturile de date, identice pentru toți pacienții.
+Tipul histologic (adenocarcinom vs.\ scuamos) este estimat de modelul de imagine C pe cubul CT din pasul 4, iar EGFR și KRAS de modelul clinic A (ambele descrise la rezultate). Sub fiecare valoare, aplicația afișează sursa, numărul de pacienți de antrenare și AUC-ul din validarea încrucișată, inclusiv mențiunea că modelul KRAS nu este mai bun decât întâmplarea. Dacă modelul de imagine nu este disponibil, aplicația revine la modelul clinic și marchează histologia cu un avertisment vizibil (\textit{„DEMO''}).
 
 Figura~\ref{fig:app} arată cei cinci pași ai aplicației pe cazul demonstrativ (o fantomă sintetică CT + PET, nu un pacient real).
 
@@ -115,7 +115,7 @@ Figura~\ref{fig:app} arată cei cinci pași ai aplicației pe cazul demonstrativ
 \begin{minipage}[t]{0.49\textwidth}
     \centering
     \includegraphics[width=\linewidth]{figures/app_pas5.jpg}\\[2pt]
-    \small (e) Rezultate: EGFR/KRAS din modelul clinic; histologia încă demonstrativă
+    \small (e) Rezultate: histologia din modelul C, EGFR/KRAS din modelul A
 \end{minipage}
 \caption{Cei cinci pași ai aplicației PulmoGnosis, pe cazul demonstrativ.}
 \label{fig:app}
@@ -359,7 +359,7 @@ KRAS & 171 / 38 & 0,55 (0,45--0,65) & 0,57 $\pm$ 0,15 & 0,33 & 0,61 & 0,41 \\ \b
 
 \textbf{Interpretare.} Pentru EGFR, modelul clinic are o capacitate de discriminare moderată, clar peste nivelul întâmplării. Coeficienții modelului final confirmă relațiile cunoscute clinic: statutul de fost fumător sau fumător actual scade șansele unei mutații EGFR, iar genul feminin le crește. Pentru KRAS, intervalul de încredere include 0,5, deci datele clinice singure nu permit predicția acestei mutații. Aceste valori sunt nivelul de referință pentru modelele bazate pe imagini din etapele următoare.
 
-\textbf{Integrarea în aplicație.} Modelul final, antrenat pe toți pacienții cu etichetă cunoscută, este exportat ca fișier JSON și folosit de aplicație pentru estimarea EGFR și KRAS. Fiecare valoare afișată indică sursa și AUC-ul din validarea încrucișată, iar pentru KRAS aplicația menționează explicit că modelul nu este mai bun decât întâmplarea. Tipul histologic rămâne valoare de referință, marcată vizibil.
+\textbf{Integrarea în aplicație.} Modelul final, antrenat pe toți pacienții cu etichetă cunoscută, este exportat ca fișier JSON și folosit de aplicație pentru estimarea EGFR și KRAS. Fiecare valoare afișată indică sursa și AUC-ul din validarea încrucișată, iar pentru KRAS aplicația menționează explicit că modelul nu este mai bun decât întâmplarea. Tipul histologic a fost adăugat în aplicație în etapa de laborator 3, prin modelul C.
 
 \paragraph{Modelul C pe date puține (40 de pacienți).} Modelul C clasifică adenocarcinomul (0) față de carcinomul scuamos (1) folosind doar cubul CT al tumorii. Codificatorul este un 3D ResNet-18 \cite{he2016} cu greutăți MedicalNet \cite{chen2019}, încărcat prin MONAI, care transformă cubul într-un vector de 512 valori. În această etapă întreaga rețea, plus un strat liniar de ieșire, este ajustată fin (\textit{fine-tuning}) cu AdamW (rată de învățare $10^{-4}$, \textit{weight decay} $10^{-4}$, batch de 4 cuburi, maximum 40 de epoci), cu entropie încrucișată binară ponderată după raportul claselor, augmentare (oglindiri pe cele trei axe, mici variații de intensitate, zgomot) și \textit{early stopping} (răbdare 8 epoci) după pierderea pe un subset de validare format din 15\% din pacienții de antrenare ai fiecărui fold. Datele sunt un subset stratificat de 40 de pacienți (8 scuamoși); fold-urile comune îi împart astfel încât fold-urile de test au 0, 2, 1, 4 și 1 pacienți scuamoși (pentru primul fold AUC-ul nu este definit). Rezultatul: AUC 0,71 (IÎ 0,53--0,87), media pe cele 4 fold-uri evaluabile 0,63. Intervalul de încredere este larg; etapa de laborator 3 arată că acest rezultat nu se menține pe toți pacienții.
 
@@ -367,7 +367,14 @@ KRAS & 171 / 38 & 0,55 (0,45--0,65) & 0,57 $\pm$ 0,15 & 0,33 & 0,61 & 0,41 \\ \b
 
 \subsubsection{Etapa de laborator 3: date reale și comparație cu literatura}
 
-În această etapă modelele de imagine sunt rulate pe toți pacienții NSCLC-Radiogenomics cu mască tumorală, iar rezultatele sunt comparate cu modelul clinic și cu lucrările publicate (Secțiunea~\ref{sec:related}).
+În această etapă modelele de imagine sunt rulate pe toți pacienții NSCLC-Radiogenomics cu mască tumorală, iar rezultatele sunt comparate cu modelul clinic și cu lucrările publicate (Secțiunea~\ref{sec:related}). Pe scurt, etapa aduce:
+\begin{itemize}
+    \item datele complete: 144 de cuburi CT verificate vizual, 141 de pacienți pentru histologie;
+    \item modelul C pe toți pacienții: AUC 0,64 pentru histologie cu sonda liniară, nivelul întâmplării pentru EGFR și KRAS;
+    \item verificarea setului Kaggle: 16\% din imaginile de test sunt copii ale celor de antrenare;
+    \item comparația cu literatura (Tabelul~\ref{tab:sota});
+    \item modelul C integrat în aplicație, pentru histologie.
+\end{itemize}
 
 \paragraph{Cuburile de imagine.} Pentru fiecare dintre cei 144 de pacienți NSCLC-Radiogenomics cu mască tumorală (SEG) s-a extras un cub de $128^3$ voxeli de 0,75~mm (latura de 96~mm), centrat pe centrul de masă al măștii și re-eșantionat direct din seria CT pe care a fost desenată masca. Extragerea a reușit pentru toți cei 144 de pacienți, iar verificarea vizuală a secțiunii axiale centrale a fiecărui cub a confirmat că tumora se află în centru în toate cazurile. Două situații sunt notabile: la 6 pacienți centrul cubului are densitatea aerului (sub $-500$~HU), deoarece tumora este cavitară sau neregulată, iar centrul de masă al măștii cade într-o cavitate; la 7 pacienți tumora depășește 96~mm pe cel puțin o axă, deci cubul conține doar o parte a ei. Clasificarea histologică folosește 141 dintre acești pacienți (112 adenocarcinoame, 29 carcinoame scuamoase); ceilalți 3 au alt tip histologic sau unul nespecificat.
 
@@ -428,11 +435,18 @@ Han et al.\ \cite{han2021} & adeno vs.\ scuamos, PET/CT, radiomică + LDA/SVM & 
 \label{tab:sota}
 \end{table}
 
-\paragraph{Ce nu a fost încă realizat din această etapă.} (1) Registrarea PET pe CT: PET-ul se află în alt studiu decât CT-ul pe care a fost desenată masca, deci este necesară o registrare CT--CT înainte de a folosi canalul PET; modelele de mai sus folosesc doar CT. (2) Setul Lung-PET-CT-Dx (355 de pacienți), necesar pentru histologie pe date mai multe și pentru validarea externă. (3) Baseline-ul radiomic (PyRadiomics + regresie logistică). (4) Integrarea modelului de histologie în aplicație.
+\paragraph{Integrarea modelului C în aplicație.} Sonda liniară a fost antrenată o dată pe toți cei 141 de pacienți și exportată, ca modelul A, într-un fișier JSON mic (\texttt{models/\allowbreak histology\_probe.json}): scalarea trăsăturilor și coeficienții regresiei. În pasul 5, aplicația taie cubul de $128^3$ voxeli în jurul centrului ales în pasul 4, îl trece prin rețeaua MedicalNet fixă (pe CPU, câteva secunde; greutățile se descarcă automat la prima rulare) și aplică regresia; antrenarea și aplicația folosesc aceeași funcție de pregătire a cubului, deci intrarea este identică. Ieșirea este afișată ca adenocarcinom vs.\ scuamos (Figura~\ref{fig:app}e), împreună cu limitările: AUC 0,64, fără carcinom cu celule mici, un scor (clasele au fost ponderate egal) și nu o probabilitate calibrată, iar la antrenare cubul a fost centrat pe masca radiologului, nu pe centrul ales în aplicație. Pe fantoma sintetică din cazul demonstrativ scorul este extrem (100\% adenocarcinom), deoarece fantoma nu seamănă cu tumorile reale; cazul demonstrativ verifică funcționarea, nu performanța.
+
+\paragraph{Ce nu a fost încă realizat din această etapă.} (1) Registrarea PET pe CT: PET-ul se află în alt studiu decât CT-ul pe care a fost desenată masca, deci este necesară o registrare CT--CT înainte de a folosi canalul PET; modelele de mai sus folosesc doar CT. (2) Setul Lung-PET-CT-Dx (355 de pacienți), necesar pentru histologie pe date mai multe și pentru validarea externă. (3) Baseline-ul radiomic (PyRadiomics + regresie logistică).
 
 \subsubsection{Etapa de laborator 4: îmbunătățiri și studii de ablație}
 
-Toate variantele de mai jos rezolvă aceeași sarcină (adenocarcinom vs.\ scuamos, 141 de pacienți, 29 scuamoși), pe aceleași fold-uri, și diferă de varianta precedentă printr-o singură componentă.
+Toate variantele de mai jos rezolvă aceeași sarcină (adenocarcinom vs.\ scuamos, 141 de pacienți, 29 scuamoși), pe aceleași fold-uri, și diferă de varianta precedentă printr-o singură componentă. Pe scurt, etapa aduce:
+\begin{itemize}
+    \item diagnosticarea eșecului ajustării fine (test de supra-ajustare) și înlocuirea ei cu sonda liniară: AUC de la 0,48 la 0,64;
+    \item corectarea pragului de decizie, astfel încât sensibilitatea și specificitatea să fie interpretabile;
+    \item o ablație cu patru variante: pre-antrenarea și normalizarea nu contează, contextul din jurul tumorii contează.
+\end{itemize}
 
 \paragraph{Îmbunătățirea 1: diagnosticarea și înlocuirea ajustării fine.} Ajustarea fină pe toți pacienții (AUC 0,48) nu învață: pierderea de antrenare rămâne în jurul valorii 1,0--1,2 în toate fold-urile, iar epocile alese prin \textit{early stopping} au fost 26, 9, 1, 5 și 5. Un test de supra-ajustare (16 pacienți, fără augmentare și fără \textit{early stopping}, 30 de epoci) a arătat că implementarea este corectă: pierderea scade de la 1,39 la 0,12, iar AUC-ul pe pacienții de antrenare ajunge la 1,0 începând cu epoca 15 -- dar numai după aproximativ 6 epoci în care rețeaua nu învață nimic. Concluzia: setul de validare pentru \textit{early stopping} (aproximativ 17 pacienți, dintre care 3--4 scuamoși) este prea mic și zgomotos, iar antrenarea se oprește înainte să înceapă învățarea. Înlocuirea ajustării fine cu sonda liniară (trăsături fixe + regresie logistică), care nu are nevoie de \textit{early stopping}, crește AUC-ul de la 0,48 la 0,64.
 
