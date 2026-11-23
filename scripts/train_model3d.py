@@ -59,8 +59,12 @@ def predict(model, loader, device) -> np.ndarray:
     return np.concatenate(out)
 
 
-def train(train_df: pd.DataFrame, val_df: pd.DataFrame | None, args, device, seed: int, epochs: int):
-    """Train one model. With `val_df`, keeps the weights of the epoch with the lowest validation loss."""
+def train(train_df: pd.DataFrame, val_df: pd.DataFrame | None, args, device, seed: int, epochs: int,
+          augment: bool = True, on_epoch=None):
+    """Train one model. With `val_df`, keeps the weights of the epoch with the lowest validation loss.
+
+    `on_epoch(model, row)` is called after every epoch and may add entries to the logged row.
+    """
     torch.manual_seed(seed)
     model = ResNet3DClassifier(in_channels=1, pretrained=args.pretrained).to(device)
     pos = float(train_df["y"].sum())
@@ -68,7 +72,7 @@ def train(train_df: pd.DataFrame, val_df: pd.DataFrame | None, args, device, see
     loss_fn = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scaler = torch.amp.GradScaler(enabled=device.type == "cuda")
-    train_loader = make_loader(train_df, args, augment=True, shuffle=True, seed=seed)
+    train_loader = make_loader(train_df, args, augment=augment, shuffle=True, seed=seed)
     val_loader = make_loader(val_df, args, augment=False, shuffle=False, seed=seed) if val_df is not None else None
 
     history, best = [], (np.inf, 0, None)
@@ -85,6 +89,8 @@ def train(train_df: pd.DataFrame, val_df: pd.DataFrame | None, args, device, see
             scaler.update()
             total += loss.item() * len(y)
         row = {"epoch": epoch, "train_loss": total / len(train_df)}
+        if on_epoch is not None:
+            on_epoch(model, row)
         if val_loader is not None:
             p = predict(model, val_loader, device)
             y_val = val_df["y"].to_numpy()
@@ -101,6 +107,25 @@ def train(train_df: pd.DataFrame, val_df: pd.DataFrame | None, args, device, see
     if best[2] is not None:
         model.load_state_dict(best[2])
     return model, history, best[1] or epochs
+
+
+def overfit_check(df: pd.DataFrame, args, device, out: Path) -> None:
+    """Fit a few patients with nothing in the way: if the training loss does not fall, the bug is in
+    the data or model path, not in the amount of data."""
+    if args.overfit < len(df):
+        df, _ = train_test_split(df, train_size=args.overfit, stratify=df["y"], random_state=args.seed)
+    print(f"overfit check: {len(df)} patients, {int(df['y'].sum())} positive; lr {args.lr}; device {device}")
+    eval_loader = make_loader(df, args, augment=False, shuffle=False, seed=args.seed)
+
+    def report(model, row):
+        p = predict(model, eval_loader, device)
+        row["train_auc_eval_mode"] = binary_metrics(df["y"], p)["auc"]
+        row["prob_spread"] = float(p.max() - p.min())
+        model.train()
+
+    _, history, _ = train(df, None, args, device, args.seed, args.epochs, augment=False, on_epoch=report)
+    (out / "overfit.json").write_text(json.dumps({"config": {**vars(args), "device": str(device)},
+                                                  "history": history}, indent=2), encoding="utf-8")
 
 
 def main() -> None:
@@ -122,6 +147,9 @@ def main() -> None:
     parser.add_argument("--bootstrap", type=int, default=2000)
     parser.add_argument("--out", required=True)
     parser.add_argument("--checkpoint", default="", help="where to save the final model (default: <out>/final_model.pt)")
+    parser.add_argument("--overfit", type=int, default=0,
+                        help="sanity check: train on N patients (no augmentation, no early stopping) and report "
+                             "the training loss/AUC per epoch; a working setup drives the loss towards 0")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -129,6 +157,9 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     cohort = pd.read_csv(args.cohort, dtype={"patient_id": str})
     df = labelled_patients(cohort, Path(args.cubes).expanduser(), args.target)
+    if args.overfit:
+        overfit_check(df, args, device, out)
+        return
     if args.subset and args.subset < len(df):
         df, _ = train_test_split(df, train_size=args.subset, stratify=df["y"], random_state=args.seed)
     df = df.merge(load_splits(args.splits), on="patient_id").reset_index(drop=True)
@@ -143,8 +174,10 @@ def main() -> None:
         print(f"fold {fold}: train {len(tr)} / val {len(val)} / test {len(test)} ({int(test['y'].sum())} positive)")
         model, history, best_epoch = train(tr, val, args, device, args.seed + int(fold), args.epochs)
         probs = predict(model, make_loader(test, args, False, False, 0), device)
+        # pos_weight balances the classes in the loss, so the matching decision threshold is 0.5
+        # (not the prevalence, which would call almost every patient positive)
         rows.append(pd.DataFrame({"patient_id": test["patient_id"], "fold": fold, "y": test["y"].astype(int),
-                                  "prob": probs, "threshold": float(train_all["y"].mean())}))
+                                  "prob": probs, "threshold": 0.5}))
         histories[int(fold)] = history
         best_epochs.append(best_epoch)
         print(f"fold {fold} done in {(time.time() - t0) / 60:.1f} min, best epoch {best_epoch}")
