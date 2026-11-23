@@ -7,6 +7,7 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{booktabs}
+\usepackage{graphicx}
 \usepackage{xcolor}
 \usepackage{hyperref}
 
@@ -82,7 +83,42 @@ Hartă Grad-CAM & Explicarea vizuală a predicției & Planificat \\ \bottomrule
 
 Pentru a evita orice confuzie, cât timp modelul nu este antrenat, panoul de rezultate afișează un avertisment vizibil (\textit{„DEMO -- fără model antrenat''}), iar valorile prezentate sunt prevalențele etichetelor din seturile de date, identice pentru toți pacienții.
 
-\todo{Adăugați capturi de ecran ale celor cinci pași ai aplicației (din cazul demonstrativ).}
+Figura~\ref{fig:app} arată cei cinci pași ai aplicației pe cazul demonstrativ (o fantomă sintetică CT + PET, nu un pacient real).
+
+\begin{figure}[h]
+\centering
+\begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/app_pas1.jpg}\\[2pt]
+    \small (a) Încărcarea scanărilor: alegerea seriilor CT și PET
+\end{minipage}\hfill
+\begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/app_pas2.jpg}\\[2pt]
+    \small (b) Vizualizarea CT cu PET suprapus
+\end{minipage}
+
+\vspace{6pt}
+\begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/app_pas3.jpg}\\[2pt]
+    \small (c) Datele clinice (pre-completate din DICOM)
+\end{minipage}\hfill
+\begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/app_pas4.jpg}\\[2pt]
+    \small (d) Localizarea tumorii și cubul de 96~mm
+\end{minipage}
+
+\vspace{6pt}
+\begin{minipage}[t]{0.49\textwidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/app_pas5.jpg}\\[2pt]
+    \small (e) Rezultate: EGFR/KRAS din modelul clinic; histologia încă demonstrativă
+\end{minipage}
+\caption{Cei cinci pași ai aplicației PulmoGnosis, pe cazul demonstrativ.}
+\label{fig:app}
+\end{figure}
 
 \subsection{Cerințe non-funcționale}
 \begin{itemize}
@@ -136,17 +172,31 @@ $\downarrow$\\
 
 În literatura de radiogenomică, mai multe studii au încercat să prezică profilul molecular sau tipul histologic folosind imagistica. Setul de date NSCLC-Radiogenomics este descris în \cite{bakr2018}, iar o primă analiză radiogenomică pe o versiune timpurie a cohortei apare în \cite{gevaert2012}.
 
-\todo{Adăugați 3--4 lucrări reale (cu DOI sau link PubMed/arXiv), găsite și citite de voi. Pentru fiecare, păstrați structura: \textit{Date}, \textit{Algoritm}, \textit{Rezultate} (cu cifrele exacte din articol).}
+Mai jos sunt patru lucrări reprezentative pentru sarcinile proiectului. Cifrele sunt cele raportate în rezumatele articolelor.
 
 \begin{itemize}
-    \item \textbf{Predicția mutației EGFR din imagini CT cu rețele 3D:} \todo{lucrare reală}
+    \item \textbf{Predicția mutației EGFR din CT cu învățare profundă} -- Wang et al.\ (2019) \cite{wang2019}.
+    \textit{Date:} 844 de pacienți cu adenocarcinom pulmonar, cu CT preoperator, status EGFR și date clinice, din două spitale (14\,926 de imagini CT).
+    \textit{Algoritm:} un model de învățare profundă antrenat cap-coadă care prezice statusul EGFR direct din imaginile CT.
+    \textit{Rezultate:} AUC 0,85 (IÎ 95\% 0,83--0,88) în cohorta principală ($n = 603$) și 0,81 (0,79--0,83) în cohorta de validare independentă ($n = 241$), semnificativ mai bun decât trăsăturile CT definite manual sau caracteristicile clinice ($p < 0{,}001$).
 
-    \item \textbf{Clasificarea subtipului histologic (adenocarcinom vs. scuamos) din CT sau PET/CT:} \todo{lucrare reală}
+    \item \textbf{Clasificarea subtipului histologic (adenocarcinom vs.\ scuamos) din PET/CT} -- Han et al.\ (2021) \cite{han2021}.
+    \textit{Date:} 867 de pacienți cu adenocarcinom și 552 cu carcinom scuamos; 20\% (283 de pacienți) păstrați ca set de test, stratificat.
+    \textit{Algoritm:} 688 de trăsături radiomice extrase din regiunea tumorală, zece metode de selecție a trăsăturilor combinate cu zece clasificatori clasici, comparate cu rețeaua de învățare profundă VGG16.
+    \textit{Rezultate (setul de test):} cele mai bune combinații radiomice au fost LDA și SVM cu selecție $\ell_{2,1}$NR (AUC 0,863; acuratețe 0,794, respectiv 0,792), iar VGG16 a obținut cel mai bun rezultat (AUC 0,903; acuratețe 0,841).
 
-    \item \textbf{Radiomică clasică (PyRadiomics + model clasic) pe NSCLC-Radiogenomics:} \todo{lucrare reală}
+    \item \textbf{Radiogenomică cu trăsături semantice și arbore de decizie} -- Gevaert et al.\ (2017) \cite{gevaert2017}.
+    \textit{Date:} 186 de pacienți NSCLC cu CT preoperator cu secțiuni subțiri.
+    \textit{Algoritm:} un radiolog toracic a adnotat 89 de trăsături semantice ale fiecărei tumori; un arbore de decizie prezice mutațiile EGFR și KRAS.
+    \textit{Rezultate:} model semnificativ statistic pentru EGFR (AUC 0,89 pe setul de test), dar nu și pentru KRAS. Arborele final folosește patru variabile: emfizemul, anomaliile căilor aeriene, procentul de componentă în sticlă mată și tipul marginii tumorale; componenta în sticlă mată indică mutația EGFR.
 
-    \item \textbf{Detecția și segmentarea nodulilor pe LIDC-IDRI / LUNA16:} \todo{lucrare reală}
+    \item \textbf{Detecția nodulilor pe LIDC-IDRI (provocarea LUNA16)} -- Setio et al.\ (2017) \cite{setio2017}.
+    \textit{Date:} 888 de scanări CT din LIDC-IDRI.
+    \textit{Algoritm:} cadru de evaluare comun pentru sisteme de detecție automată (detecție completă sau reducerea fals-pozitivelor dintr-un set de candidați); cele mai bune soluții au folosit rețele convoluționale.
+    \textit{Rezultate:} combinarea celor mai bune sisteme a atins o sensibilitate de peste 95\% la mai puțin de 1,0 fals-pozitive pe scanare; cel mai bun sistem a găsit noduli omiși de radiologii care au adnotat inițial LIDC-IDRI.
 \end{itemize}
+
+\textbf{Poziționarea proiectului.} Lucrările de mai sus folosesc cohorte mult mai mari (sute de pacienți pe clasă) decât cele publice disponibile pentru acest proiect. Cifrele lor nu sunt direct comparabile cu ale noastre: datele, protocolul de validare și setul de test diferă (de exemplu, Han et al.\ clasifică pe PET/CT cu 1419 pacienți, în timp ce modelul C folosește doar CT, pe 141 de pacienți, cu validare încrucișată).
 
 \section{Instrumente și tehnologii utile}
 
@@ -479,7 +529,25 @@ DeLong, E. R., DeLong, D. M., Clarke-Pearson, D. L. (1988).
 \textit{Comparing the areas under two or more correlated receiver operating characteristic curves: a nonparametric approach}.
 Biometrics, 44(3), 837--845.
 
-% TODO: adăugați aici referințele reale pentru secțiunea Related Work.
+\bibitem{wang2019}
+Wang, S., Shi, J., Ye, Z., Dong, D., Yu, D., Zhou, M., Liu, Y., Gevaert, O., Wang, K., Zhu, Y., Zhou, H., Liu, Z., Tian, J. (2019).
+\textit{Predicting EGFR mutation status in lung adenocarcinoma on computed tomography image using deep learning}.
+European Respiratory Journal, 53(3), 1800986. \url{https://doi.org/10.1183/13993003.00986-2018}
+
+\bibitem{han2021}
+Han, Y., Ma, Y., Wu, Z., Zhang, F., Zheng, D., Liu, X., Tao, L., Liang, Z., Yang, Z., Li, X., Huang, J., Guo, X. (2021).
+\textit{Histologic subtype classification of non-small cell lung cancer using PET/CT images}.
+European Journal of Nuclear Medicine and Molecular Imaging, 48(2), 350--360. \url{https://doi.org/10.1007/s00259-020-04771-5}
+
+\bibitem{gevaert2017}
+Gevaert, O., Echegaray, S., Khuong, A., Hoang, C. D., Shrager, J. B., Jensen, K. C., Berry, G. J., Guo, H. H., Lau, C., Plevritis, S. K., Rubin, D. L., Napel, S., Leung, A. N. (2017).
+\textit{Predictive radiogenomics modeling of EGFR mutation status in lung cancer}.
+Scientific Reports, 7, 41674. \url{https://doi.org/10.1038/srep41674}
+
+\bibitem{setio2017}
+Setio, A. A. A., Traverso, A., de Bel, T., et al. (2017).
+\textit{Validation, comparison, and combination of algorithms for automatic detection of pulmonary nodules in computed tomography images: The LUNA16 challenge}.
+Medical Image Analysis, 42, 1--13. \url{https://doi.org/10.1016/j.media.2017.06.015}
 
 \end{thebibliography}
 
