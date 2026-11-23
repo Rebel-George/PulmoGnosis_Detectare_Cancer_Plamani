@@ -377,7 +377,11 @@ with st.sidebar:
     st.divider()
     progress = st.container()
     st.divider()
-    st.caption("Versiune de lucru (Etapa 2): EGFR/KRAS din modelul clinic; restul ieșirilor sunt încă demonstrative.")
+    if isinstance(get_predictor(), ImagePredictor):
+        st.caption("Versiune de lucru: histologia din modelul de imagine C, EGFR/KRAS din modelul clinic A; "
+                   "localizarea tumorii este încă euristică.")
+    else:
+        st.caption("Versiune de lucru: EGFR/KRAS din modelul clinic; restul ieșirilor sunt încă demonstrative.")
 
 step_index = STEPS.index(step)
 missing = requirements_met(step_index)
