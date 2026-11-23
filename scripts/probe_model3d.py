@@ -46,6 +46,8 @@ def main() -> None:
     parser.add_argument("--out", required=True)
     parser.add_argument("--export", default="",
                         help="also fit on all patients and write the model for the app (e.g. models/histology_probe.json)")
+    parser.add_argument("--exclude", default="",
+                        help="comma-separated patient IDs left out of the exported model (held-out test cases)")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -96,7 +98,10 @@ def main() -> None:
 
     if args.export:
         classes = ["adenocarcinom", "carcinom scuamos"] if args.target == "histology" else ["fără mutație", "mutant"]
-        model = fit_final(features, df["y"].to_numpy(), c=args.c, target=args.target, classes=classes,
+        keep = ~df["patient_id"].isin([p for p in args.exclude.split(",") if p]).to_numpy()
+        if not keep.all():
+            print(f"export without {int((~keep).sum())} held-out patients: {args.exclude}")
+        model = fit_final(features[keep], df["y"].to_numpy()[keep], c=args.c, target=args.target, classes=classes,
                           pretrained=args.pretrained, input_norm=args.input_norm, crop=args.crop,
                           cv_auc=[pooled["auc"], lo, hi])
         print(f"exported {model.save(args.export)}: {model.n_patients} patients, {model.n_positive} positive")

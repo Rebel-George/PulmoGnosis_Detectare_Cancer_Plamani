@@ -18,7 +18,8 @@ import streamlit as st
 
 from pulmognosis.data.dicom import SeriesInfo, pick_series, scan_folder
 from pulmognosis.data.synthetic import write_demo_case
-from pulmognosis.inference import ClinicalPredictor, HistologyProbe, ImagePredictor, PlaceholderPredictor, Predictor
+from pulmognosis.inference import (ClinicalPredictor, HistologyProbe, ImagePredictor, PlaceholderPredictor, Predictor,
+                                   seg_localisation)
 from pulmognosis.pipeline import (
     MODEL_PATCH_MM,
     MODEL_PATCH_SIZE,
@@ -74,7 +75,7 @@ def reset_from(step: str) -> None:
     """Clear everything computed at or after `step`, so stale results never show."""
     keys = {
         "case": ["case", "ct", "pet", "dicom_header", "clinical", "location", "patch_cache",
-                 "prediction", "prediction_key"],
+                 "prediction", "prediction_key", "seg_location"],
         "clinical": ["clinical"],
         "location": ["location"],
     }[step]
@@ -183,6 +184,8 @@ def step_upload() -> None:
         st.session_state.ct = to_array(case.ct)
         st.session_state.pet = to_array(case.pet) if case.has_pet else None
         st.session_state.dicom_header = pydicom.dcmread(ct.files[0], stop_before_pixels=True)
+        with st.spinner("Se caută o mască tumorală (SEG) pentru acest CT…"):
+            st.session_state.seg_location = seg_localisation(folder, ct.uid, case)
 
     if "case" in st.session_state:
         case = st.session_state.case
@@ -191,6 +194,8 @@ def step_upload() -> None:
         st.success(
             f"Caz pregătit: CT {x}×{y}×{z} voxeli la rezoluția originală ({sx:.2f} × {sy:.2f} × {sz:.2f} mm), "
             + ("cu PET aliniat." if case.has_pet else "fără PET.")
+            + (" Mască tumorală (SEG) găsită: pasul 4 pornește din centrul ei."
+               if st.session_state.get("seg_location") else "")
             + " Continuați cu pasul 2."
         )
         if case.pet_warning:
@@ -266,7 +271,7 @@ def step_localise() -> None:
     predictor = get_predictor()
 
     if "location" not in st.session_state:
-        st.session_state.location = predictor.localise(st.session_state.case)
+        st.session_state.location = st.session_state.get("seg_location") or predictor.localise(st.session_state.case)
     loc = st.session_state.location
 
     st.write(

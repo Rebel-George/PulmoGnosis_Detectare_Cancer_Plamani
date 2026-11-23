@@ -99,3 +99,18 @@ def test_seg_finder_skips_ai_masks(tmp_path):
     ai.save_as(root / "SEG" / "AIMI.dcm")
     assert find_seg_files(root) == [original]
     assert len(find_seg_files(root, include_ai=True)) == 2
+
+
+def test_app_localises_from_the_seg_of_the_chosen_ct(tmp_path):
+    from pulmognosis.data.dicom import pick_series
+    from pulmognosis.inference import seg_localisation
+    from pulmognosis.pipeline import prepare_case
+
+    root = write_demo_case(tmp_path, TEST)
+    ct = pick_series(scan_folder(root), "CT")
+    case = prepare_case(ct, None)
+    loc = seg_localisation(root, ct.uid, case)
+    assert loc is not None and "SEG" in loc.method
+    assert np.allclose(loc.center_mm, TUMOUR_CENTER_MM, atol=1.0)
+    assert np.allclose(case.index_to_mm(loc.center_zyx), TUMOUR_CENTER_MM, atol=3.0)  # nearest voxel
+    assert seg_localisation(root, "1.2.3.another-ct", case) is None  # a SEG drawn on another CT is ignored

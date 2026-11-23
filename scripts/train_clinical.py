@@ -31,6 +31,7 @@ def main() -> None:
     parser.add_argument("--C", type=float, default=1.0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--bootstrap", type=int, default=2000)
+    parser.add_argument("--exclude", default="", help="comma-separated patient IDs left out of the exported model")
     args = parser.parse_args()
 
     cohort = pd.read_csv(args.cohort, dtype={"patient_id": str})
@@ -66,7 +67,11 @@ def main() -> None:
     (out / "metrics.json").write_text(json.dumps(results, indent=2), encoding="utf-8")
     (out / "config.json").write_text(json.dumps(vars(args), indent=2), encoding="utf-8")
 
-    model = fit_final(cohort, c=args.C)
+    # Patients kept out of the final model (e.g. the app's held-out test cases); CV above uses everyone.
+    held_out = [p for p in args.exclude.split(",") if p]
+    model = fit_final(cohort[~cohort["patient_id"].isin(held_out)], c=args.C)
+    if held_out:
+        print(f"Final model fitted without {len(held_out)} held-out patients: {', '.join(held_out)}")
     model.cv_auc = {t: [r["auc"], *r["auc_ci95"]] for t, r in results.items()}
     model_path = model.save()
     print(f"Saved metrics to {out}/ and the app model to {model_path}")

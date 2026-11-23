@@ -32,6 +32,27 @@ _KRAS_RATE = 38 / 171
 class Localisation:
     center_zyx: tuple[int, int, int]
     method: str
+    center_mm: tuple[float, float, float] | None = None  # exact centre when known (a SEG centroid), else from the voxel
+
+
+def seg_localisation(folder: str | Path, ct_uid: str, case: Case) -> Localisation | None:
+    """The tumour centre from a radiologist's SEG mask in the loaded folder, if one belongs to this CT.
+
+    This is how the training cubes were centred, so a case loaded with its SEG gets the same input
+    the model was trained on. A SEG drawn on another CT series is ignored (different coordinates).
+    """
+    from pulmognosis.data.seg import find_seg_files, read_seg
+
+    for path in find_seg_files(folder):
+        try:
+            mask = read_seg(path)
+        except ValueError:
+            continue
+        if mask.referenced_series_uid in (None, ct_uid):
+            center_mm = tuple(float(v) for v in mask.center_mm)
+            return Localisation(case.mm_to_index(center_mm), "centrul măștii tumorale (SEG) desenate de radiolog",
+                                center_mm)
+    return None
 
 
 OUTPUTS = ("histology", "egfr", "kras")
@@ -192,10 +213,13 @@ class ImagePredictor(ClinicalPredictor):
         self.histology = histology
 
     def predict(self, case: Case, location: Localisation, clinical: ClinicalData) -> Prediction:
-        from pulmognosis.pipeline import extract_model_patch
+        from pulmognosis.pipeline import extract_model_patch, extract_model_patch_mm
 
         base = super().predict(case, location, clinical)
-        ct_cube, _ = extract_model_patch(case, location.center_zyx)
+        if location.center_mm is not None:  # exact SEG centre, as in training
+            ct_cube, _ = extract_model_patch_mm(case, location.center_mm)
+        else:
+            ct_cube, _ = extract_model_patch(case, location.center_zyx)
         p = self.histology.score(ct_cube)
         negative, positive = self.histology.model.classes
         return Prediction(
