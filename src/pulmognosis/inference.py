@@ -131,3 +131,79 @@ class ClinicalPredictor(PlaceholderPredictor):
             placeholder_outputs=frozenset({"histology"}),
             sources={"histology": base.sources["histology"], "egfr": self._source("egfr"), "kras": self._source("kras")},
         )
+
+
+class HistologyProbe:
+    """Model C in the app: the frozen 3D ResNet-18 turns the CT cube into 512 features, and the
+    exported logistic regression scores adenocarcinoma vs. squamous from them.
+
+    torch and MONAI are imported only when the first cube is scored; with `pretrained="medicalnet"`
+    the first use downloads the MedicalNet weights through MONAI (then cached).
+    """
+
+    def __init__(self, model):
+        self.model = model  # pulmognosis.classification.probe.ProbeModel
+        self._encoder = None
+
+    @classmethod
+    def from_file(cls, path: str | Path) -> "HistologyProbe":
+        from pulmognosis.classification.probe import ProbeModel
+
+        return cls(ProbeModel.load(path))
+
+    def _get_encoder(self):
+        if self._encoder is None:
+            import torch
+
+            from pulmognosis.classification.model3d import ResNet3DClassifier
+
+            torch.manual_seed(0)  # only matters for pretrained="none" (tests)
+            self._encoder = ResNet3DClassifier(in_channels=1, pretrained=self.model.pretrained).encoder.eval()
+        return self._encoder
+
+    def score(self, ct_cube_hu: np.ndarray) -> float:
+        """Score of the positive class (squamous) for one CT cube in HU, (z, y, x)."""
+        import torch
+
+        from pulmognosis.classification.probe import cube_features
+        from pulmognosis.preprocessing.intensity import normalize_ct
+
+        cube = normalize_ct(np.asarray(ct_cube_hu, dtype=np.float32))[None]
+        feats = cube_features(cube, self._get_encoder(), torch.device("cpu"), self.model.input_norm, self.model.crop)
+        return float(self.model.predict_proba(feats)[0])
+
+    def source(self) -> str:
+        m = self.model
+        text = (f"model de imagine C (3D ResNet-18 MedicalNet fix + regresie logistică, doar CT), "
+                f"antrenat pe {m.n_patients} pacienți ({m.n_positive} scuamoși)")
+        if m.cv_auc:
+            auc, lo, hi = m.cv_auc
+            text += f"; AUC în validare încrucișată {auc:.2f} (IÎ 95% {lo:.2f}–{hi:.2f})"
+        return (text + ". Doar adenocarcinom vs. scuamos (fără celule mici); clasele au fost ponderate egal, "
+                "deci valoarea este un scor, nu o probabilitate calibrată. La antrenare cubul a fost centrat pe "
+                "masca radiologului, aici pe centrul ales în pasul 4.")
+
+
+class ImagePredictor(ClinicalPredictor):
+    """Model A for EGFR / KRAS plus Model C for histology; localisation is still the heuristic one."""
+
+    def __init__(self, model: ClinicalModel, histology: HistologyProbe):
+        super().__init__(model)
+        self.histology = histology
+
+    def predict(self, case: Case, location: Localisation, clinical: ClinicalData) -> Prediction:
+        from pulmognosis.pipeline import extract_model_patch
+
+        base = super().predict(case, location, clinical)
+        ct_cube, _ = extract_model_patch(case, location.center_zyx)
+        p = self.histology.score(ct_cube)
+        negative, positive = self.histology.model.classes
+        return Prediction(
+            histology={negative: 1.0 - p, positive: p},
+            egfr=base.egfr,
+            kras=base.kras,
+            note="Tipul histologic vine din modelul de imagine C (doar CT, cubul de 96 mm din pasul 4); "
+            "EGFR și KRAS vin din modelul clinic A (vârstă, gen, fumat). Ambele sunt modele slabe: vezi AUC-ul de sub fiecare.",
+            placeholder_outputs=frozenset(),
+            sources={**base.sources, "histology": self.histology.source()},
+        )

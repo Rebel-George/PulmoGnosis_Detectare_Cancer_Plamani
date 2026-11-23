@@ -25,7 +25,7 @@ import torch
 
 from pulmognosis.classification.dataset import labelled_patients
 from pulmognosis.classification.model3d import ResNet3DClassifier
-from pulmognosis.classification.probe import INPUT_NORMS, cross_validate_probe, extract_features
+from pulmognosis.classification.probe import INPUT_NORMS, cross_validate_probe, extract_features, fit_final
 from pulmognosis.evaluation.metrics import binary_metrics, bootstrap_ci
 from pulmognosis.evaluation.splits import DEFAULT_SPLITS, load_splits
 
@@ -44,6 +44,8 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--bootstrap", type=int, default=2000)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--export", default="",
+                        help="also fit on all patients and write the model for the app (e.g. models/histology_probe.json)")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -91,6 +93,13 @@ def main() -> None:
           f"{len(oof)} patients / {int(oof['y'].sum())} positive")
     print("per fold:", {k: round(v, 3) for k, v in per_fold.items()},
           f"| mean of folds {metrics['auc_mean_of_folds']:.3f}")
+
+    if args.export:
+        classes = ["adenocarcinom", "carcinom scuamos"] if args.target == "histology" else ["fără mutație", "mutant"]
+        model = fit_final(features, df["y"].to_numpy(), c=args.c, target=args.target, classes=classes,
+                          pretrained=args.pretrained, input_norm=args.input_norm, crop=args.crop,
+                          cv_auc=[pooled["auc"], lo, hi])
+        print(f"exported {model.save(args.export)}: {model.n_patients} patients, {model.n_positive} positive")
 
 
 if __name__ == "__main__":

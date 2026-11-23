@@ -18,7 +18,7 @@ import streamlit as st
 
 from pulmognosis.data.dicom import SeriesInfo, pick_series, scan_folder
 from pulmognosis.data.synthetic import write_demo_case
-from pulmognosis.inference import ClinicalPredictor, PlaceholderPredictor, Predictor
+from pulmognosis.inference import ClinicalPredictor, HistologyProbe, ImagePredictor, PlaceholderPredictor, Predictor
 from pulmognosis.pipeline import (
     MODEL_PATCH_MM,
     MODEL_PATCH_SIZE,
@@ -42,24 +42,39 @@ STEPS = (
 )
 WINDOW_LABELS = {"Plămân": WINDOWS["lung"], "Mediastin": WINDOWS["mediastinum"]}
 CLINICAL_MODEL = Path(__file__).resolve().parents[1] / "models" / "clinical_lr.json"
+HISTOLOGY_MODEL = Path(__file__).resolve().parents[1] / "models" / "histology_probe.json"
 
 st.set_page_config(page_title="PulmoGnosis", page_icon="🫁", layout="wide")
 
 
 # ---------------------------------------------------------------- state ----
 
+def _torch_available() -> bool:
+    try:
+        import monai  # noqa: F401
+        import torch  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 @st.cache_resource
 def get_predictor() -> Predictor:
-    # Model A (clinical) when its exported file exists; the image models replace this in later stages.
+    # Model A (clinical) + Model C (image, histology) when both are exported and torch is installed;
+    # Model A alone otherwise; the placeholder when nothing is exported.
     if CLINICAL_MODEL.exists():
-        return ClinicalPredictor.from_file(CLINICAL_MODEL)
+        clinical = ClinicalPredictor.from_file(CLINICAL_MODEL)
+        if HISTOLOGY_MODEL.exists() and _torch_available():
+            return ImagePredictor(clinical.model, HistologyProbe.from_file(HISTOLOGY_MODEL))
+        return clinical
     return PlaceholderPredictor()
 
 
 def reset_from(step: str) -> None:
     """Clear everything computed at or after `step`, so stale results never show."""
     keys = {
-        "case": ["case", "ct", "pet", "dicom_header", "clinical", "location", "patch_cache"],
+        "case": ["case", "ct", "pet", "dicom_header", "clinical", "location", "patch_cache",
+                 "prediction", "prediction_key"],
         "clinical": ["clinical"],
         "location": ["location"],
     }[step]
@@ -296,7 +311,14 @@ def bar_row(label: str, value: float) -> None:
 def step_results() -> None:
     st.header("5 · Rezultate")
     predictor = get_predictor()
-    prediction = predictor.predict(st.session_state.case, st.session_state.location, st.session_state.clinical)
+    # The image model takes a few seconds on CPU: compute once per (centre, clinical data), not on every rerun.
+    key = (tuple(st.session_state.location.center_zyx), st.session_state.clinical)
+    if st.session_state.get("prediction_key") != key:
+        with st.spinner("Se rulează modelele (prima rulare descarcă greutățile MedicalNet)…"):
+            st.session_state.prediction = predictor.predict(st.session_state.case, st.session_state.location,
+                                                            st.session_state.clinical)
+        st.session_state.prediction_key = key
+    prediction = st.session_state.prediction
 
     if prediction.is_placeholder:
         st.error("**DEMO – fără model antrenat.** " + prediction.note, icon="⚠️")
