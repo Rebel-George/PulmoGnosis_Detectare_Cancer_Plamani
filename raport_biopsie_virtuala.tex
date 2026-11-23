@@ -8,6 +8,7 @@
 \usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage{graphicx}
+\setlength{\emergencystretch}{3em} % lets lines with long unbreakable names (e.g. Lung-PET-CT-Dx) stay inside the margin
 \usepackage{xcolor}
 \usepackage{hyperref}
 
@@ -75,17 +76,17 @@ Preprocesare (Etapa 0) & HU, SUV, aliniere PET--CT la rezoluția nativă, cub $1
 Vizualizare CT + PET & Trei planuri, ferestre CT, suprapunere PET reglabilă & Implementat \\
 Date clinice & Formular cu pre-completare din DICOM & Implementat \\
 Localizarea tumorii & Propunere automată + corecție manuală, previzualizarea regiunii decupate & Euristică temporară (maximul SUV); 3D U-Net planificat \\
-Predicție histologie, EGFR, KRAS & Panou de rezultate & Interfață implementată; valori de referință (prevalența din seturile de date) până la antrenarea modelului \\
+Predicție histologie, EGFR, KRAS & Panou de rezultate & EGFR, KRAS: modelul clinic (A); histologie: valori de referință până la integrarea modelului C \\
 Hartă Grad-CAM & Explicarea vizuală a predicției & Planificat \\ \bottomrule
 \end{tabular}
 \caption{Funcționalitățile aplicației și stadiul lor de implementare.}
 \end{table}
 
-Pentru a evita orice confuzie, cât timp modelul nu este antrenat, panoul de rezultate afișează un avertisment vizibil (\textit{„DEMO -- fără model antrenat''}), iar valorile prezentate sunt prevalențele etichetelor din seturile de date, identice pentru toți pacienții.
+EGFR și KRAS sunt estimate de modelul clinic (modelul A, descris la rezultatele Etapei 2), iar fiecare valoare indică sursa și AUC-ul din validarea încrucișată. Pentru a evita orice confuzie, ieșirile care nu provin încă dintr-un model antrenat (în prezent, tipul histologic) sunt marcate cu un avertisment vizibil (\textit{„DEMO''}) și afișează prevalențele etichetelor din seturile de date, identice pentru toți pacienții.
 
 Figura~\ref{fig:app} arată cei cinci pași ai aplicației pe cazul demonstrativ (o fantomă sintetică CT + PET, nu un pacient real).
 
-\begin{figure}[h]
+\begin{figure}[!htbp]
 \centering
 \begin{minipage}[t]{0.49\textwidth}
     \centering
@@ -271,7 +272,7 @@ Toate seturile sunt publice, anonimizate și provin din The Cancer Imaging Archi
 \begin{table}[h]
 \centering
 \small
-\begin{tabular}{@{}lccl@{}}
+\begin{tabular}{@{}p{4.3cm}cp{3.4cm}p{4.3cm}@{}}
 \toprule
 \textbf{Set de date} & \textbf{Pacienți} & \textbf{Modalități} & \textbf{Rol} \\ \midrule
 LIDC-IDRI \cite{armato2011} & 1010 & CT & Etapa 1 (segmentare) \\
@@ -372,6 +373,7 @@ Pentru fiecare dintre cei 144 de pacienți NSCLC-Radiogenomics cu mască tumoral
 \begin{table}[h]
 \centering
 \footnotesize
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lcccccc@{}}
 \toprule
 \textbf{Variantă} & \textbf{Pacienți / scuamoși} & \textbf{AUC (IÎ 95\%)} & \textbf{AUC medie fold-uri} & \textbf{F1} & \textbf{Sens.} & \textbf{Spec.} \\ \midrule
@@ -379,7 +381,8 @@ Ajustare fină, 40 de pacienți & 40 / 8 & 0,71 (0,53--0,87) & 0,63 (4 fold-uri)
 Ajustare fină, toți pacienții & 141 / 29 & 0,48 (0,36--0,61) & 0,48 & --$^{*}$ & --$^{*}$ & --$^{*}$ \\
 \textbf{Sondă liniară, cub de 96~mm} & 141 / 29 & \textbf{0,64 (0,53--0,74)} & 0,66 & 0,32 & 0,31 & 0,84 \\
 Sondă liniară, decupaj de 48~mm (exploratoriu) & 141 / 29 & 0,52 (0,40--0,63) & 0,53 & 0,14 & 0,14 & 0,79 \\ \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \caption{Modelul C, adenocarcinom vs.\ scuamos (NSCLC-Radiogenomics), validare încrucișată în 5 fold-uri. $^{*}$Rulările cu ajustare fină au folosit ca prag prevalența claselor, nepotrivită pentru pierderea ponderată (eroare corectată ulterior); AUC-ul nu depinde de prag, deci este raportat doar acesta.}
 \label{tab:model_c}
 \end{table}
@@ -428,6 +431,7 @@ NSCLC-Radiogenomics (după ajustare) & -- & -- \\ \bottomrule
 \begin{table}[h]
 \centering
 \small
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lccc@{}}
 \toprule
 \textbf{Model} & \textbf{Histologie AUC (IÎ 95\%)} & \textbf{EGFR AUC (IÎ 95\%)} & \textbf{KRAS AUC (IÎ 95\%)} \\ \midrule
@@ -438,7 +442,8 @@ Doar imagine (CT), sondă liniară (model C) & 0,64 (0,53--0,74) & -- & -- \\
 Doar imagine (CT + PET) & -- & -- & -- \\
 Late-Fusion fără multi-task & -- & -- & -- \\
 \textbf{Late-Fusion complet} & -- & -- & -- \\ \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \caption{Performanța Etapei 2 și studiul de ablație (de completat). Histologie: adenocarcinom vs.\ scuamos, NSCLC-Radiogenomics, validare încrucișată în 5 fold-uri. $^{*}$Modelul B rezolvă altă problemă (4 clase, imagini 2D fără identificatori de pacient); vezi Tabelul~\ref{tab:model_b}.}
 \end{table}
 
