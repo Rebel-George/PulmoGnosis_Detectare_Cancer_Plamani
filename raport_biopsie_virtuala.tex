@@ -212,7 +212,7 @@ Resurse de calcul & GPU local (6~GB), Google Colab / Kaggle & Antrenare locală;
 
 \section{Metodologia Experimentală și Validarea}
 
-Proiectul se află în faza de dezvoltare; această secțiune descrie metodologia care va fi urmată. Nu sunt raportate rezultate înainte de rularea efectivă a experimentelor.
+Această secțiune descrie metodologia și rezultatele obținute până acum. Toate cifrele raportate provin din rulări efective ale codului proiectului; rezultatele care nu au fost încă obținute sunt marcate cu „--''.
 
 \subsection{Descrierea seturilor de date}
 
@@ -227,7 +227,7 @@ Toate seturile sunt publice, anonimizate și provin din The Cancer Imaging Archi
 LIDC-IDRI \cite{armato2011} & 1010 & CT & Etapa 1 (segmentare) \\
 NSCLC-Radiogenomics \cite{bakr2018} & 211 & CT, PET (201), SEG (144) & Etapa 2 (mutații, histologie); ajustare Etapa 1 \\
 Lung-PET-CT-Dx \cite{li2020} & 355 & CT, PET (parțial) & Etapa 2 (histologie); ajustare Etapa 1 \\
-Kaggle Chest CT-Scan & $\sim$1000 imagini 2D & JPG/PNG & Baseline 2D \\ \bottomrule
+Kaggle Chest CT-Scan \cite{kaggle_ct} & 1000 imagini 2D & JPG/PNG & Baseline 2D \\ \bottomrule
 \end{tabular}
 \caption{Seturile de date folosite și rolul fiecăruia.}
 \end{table}
@@ -294,9 +294,9 @@ Experimentele urmăresc trei întrebări de cercetare:
 \small
 \begin{tabular}{@{}lcccccc@{}}
 \toprule
-\textbf{Mutație} & \textbf{Pacienți / mutanți} & \textbf{AUC (IÎ 95\%)} & \textbf{AUC pe fold-uri} & \textbf{F1} & \textbf{Sens.} & \textbf{Spec.} \ \midrule
-EGFR & 172 / 43 & 0,72 (0,62--0,81) & 0,74 $\pm$ 0,08 & 0,49 & 0,58 & 0,74 \
-KRAS & 171 / 38 & 0,55 (0,45--0,65) & 0,57 $\pm$ 0,15 & 0,33 & 0,61 & 0,41 \ \bottomrule
+\textbf{Mutație} & \textbf{Pacienți / mutanți} & \textbf{AUC (IÎ 95\%)} & \textbf{AUC pe fold-uri} & \textbf{F1} & \textbf{Sens.} & \textbf{Spec.} \\ \midrule
+EGFR & 172 / 43 & 0,72 (0,62--0,81) & 0,74 $\pm$ 0,08 & 0,49 & 0,58 & 0,74 \\
+KRAS & 171 / 38 & 0,55 (0,45--0,65) & 0,57 $\pm$ 0,15 & 0,33 & 0,61 & 0,41 \\ \bottomrule
 \end{tabular}
 \caption{Modelul A (regresie logistică pe vârstă, gen și fumat), validare încrucișată în 5 fold-uri.}
 \end{table}
@@ -305,10 +305,63 @@ KRAS & 171 / 38 & 0,55 (0,45--0,65) & 0,57 $\pm$ 0,15 & 0,33 & 0,61 & 0,41 \ \bo
 
 \textbf{Integrarea în aplicație.} Modelul final, antrenat pe toți pacienții cu etichetă cunoscută, este exportat ca fișier JSON și folosit de aplicație pentru estimarea EGFR și KRAS. Fiecare valoare afișată indică sursa și AUC-ul din validarea încrucișată, iar pentru KRAS aplicația menționează explicit că modelul nu este mai bun decât întâmplarea. Tipul histologic rămâne valoare de referință, marcată vizibil.
 
-\todo{Adăugați rezultatele modelelor B (CNN 2D, Kaggle) și C (3D ResNet-18 pe date puține).}
+\subsubsection{Etapa 2: cuburile de imagine pentru clasificare}
+
+Pentru fiecare dintre cei 144 de pacienți NSCLC-Radiogenomics cu mască tumorală (SEG) s-a extras un cub de $128^3$ voxeli de 0,75~mm (latura de 96~mm), centrat pe centrul de masă al măștii și re-eșantionat direct din seria CT pe care a fost desenată masca. Extragerea a reușit pentru toți cei 144 de pacienți, iar verificarea vizuală a secțiunii axiale centrale a fiecărui cub a confirmat că tumora se află în centru în toate cazurile. Două situații sunt notabile: la 6 pacienți centrul cubului are densitatea aerului (sub $-500$~HU), deoarece tumora este cavitară sau neregulată, iar centrul de masă al măștii cade într-o cavitate; la 7 pacienți tumora depășește 96~mm pe cel puțin o axă, deci cubul conține doar o parte a ei. Clasificarea histologică folosește 141 dintre acești pacienți (112 adenocarcinoame, 29 carcinoame scuamoase); ceilalți 3 au alt tip histologic sau unul nespecificat.
+
+\subsubsection{Etapa 2: modelul C (3D ResNet-18, adenocarcinom vs.\ scuamos)}
+
+\textbf{Algoritmul.} Modelul C clasifică adenocarcinomul (0) față de carcinomul scuamos (1) folosind doar cubul CT. Codificatorul este un 3D ResNet-18 \cite{he2016} cu greutăți MedicalNet \cite{chen2019}, încărcat prin MONAI, care transformă cubul într-un vector de 512 valori. Au fost evaluate două moduri de folosire:
+\begin{itemize}
+    \item \textbf{Ajustare fină} (\textit{fine-tuning}): întreaga rețea plus un strat liniar de ieșire sunt antrenate cu AdamW (rată de învățare $10^{-4}$, \textit{weight decay} $10^{-4}$, batch de 4 cuburi, maximum 40 de epoci), cu entropie încrucișată binară ponderată după raportul claselor și augmentare (oglindiri pe cele trei axe, mici variații de intensitate, zgomot). Antrenarea se oprește (\textit{early stopping}, răbdare 8 epoci) după pierderea pe un subset de validare format din 15\% din pacienții de antrenare ai fiecărui fold.
+    \item \textbf{Sondă liniară} (\textit{linear probe}): codificatorul nu se mai antrenează. Fiecare cub, standardizat la medie 0 și deviație standard 1, devine un vector de 512 trăsături, pe care se antrenează o regresie logistică cu ponderarea claselor și parametru de regularizare $C = 1$, fixat dinainte (ca la modelul A). Scalarea trăsăturilor se calculează doar pe pacienții de antrenare ai fiecărui fold; pragul de decizie este 0,5.
+\end{itemize}
+
+\textbf{Date și metodologie.} Aceleași 5 fold-uri ca la modelul A; fold-urile de test conțin între 4 și 7 pacienți scuamoși. Varianta pe date puține folosește un subset stratificat de 40 de pacienți (8 scuamoși) și păstrează fold-urile comune, astfel încât fold-urile de test au 0, 2, 1, 4 și 1 pacienți scuamoși (pentru primul fold AUC-ul nu este definit). AUC-ul este calculat pe predicțiile \textit{out-of-fold} ale tuturor pacienților, cu interval de încredere 95\% prin bootstrap (2000 de re-eșantionări). Înainte de a vedea rezultatele sondei liniare s-a stabilit varianta principală (cubul întreg, $C = 1$); decupajul central de 48~mm ($64^3$ voxeli) este raportat doar ca analiză exploratorie.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Variantă} & \textbf{Pacienți / scuamoși} & \textbf{AUC (IÎ 95\%)} & \textbf{AUC medie fold-uri} & \textbf{F1} & \textbf{Sens.} & \textbf{Spec.} \\ \midrule
+Ajustare fină, 40 de pacienți & 40 / 8 & 0,71 (0,53--0,87) & 0,63 (4 fold-uri) & --$^{*}$ & --$^{*}$ & --$^{*}$ \\
+Ajustare fină, toți pacienții & 141 / 29 & 0,48 (0,36--0,61) & 0,48 & --$^{*}$ & --$^{*}$ & --$^{*}$ \\
+\textbf{Sondă liniară, cub de 96~mm} & 141 / 29 & \textbf{0,64 (0,53--0,74)} & 0,66 & 0,32 & 0,31 & 0,84 \\
+Sondă liniară, decupaj de 48~mm (exploratoriu) & 141 / 29 & 0,52 (0,40--0,63) & 0,53 & 0,14 & 0,14 & 0,79 \\ \bottomrule
+\end{tabular}
+\caption{Modelul C, adenocarcinom vs.\ scuamos (NSCLC-Radiogenomics), validare încrucișată în 5 fold-uri. $^{*}$Rulările cu ajustare fină au folosit ca prag prevalența claselor, nepotrivită pentru pierderea ponderată (eroare corectată ulterior); AUC-ul nu depinde de prag, deci este raportat doar acesta.}
+\label{tab:model_c}
+\end{table}
+
+\textbf{Interpretare.} Ajustarea fină pe toți pacienții nu învață: AUC-ul este 0,48, la nivelul întâmplării. Pierderea de antrenare rămâne în jurul valorii 1,0--1,2 în toate fold-urile, iar epocile alese prin \textit{early stopping} au fost 26, 9, 1, 5 și 5. Un test de supra-ajustare (16 pacienți, fără augmentare și fără \textit{early stopping}, 30 de epoci) arată că implementarea este corectă: pierderea scade de la 1,39 la 0,12, iar AUC-ul pe pacienții de antrenare ajunge la 1,0 începând cu epoca 15 -- dar numai după aproximativ 6 epoci în care rețeaua nu învață nimic. Setul de validare pentru \textit{early stopping} (aproximativ 17 pacienți, dintre care 3--4 scuamoși) este prea mic și zgomotos, iar antrenarea se oprește înainte să înceapă învățarea. Rezultatul de 0,71 pe 40 de pacienți trebuie deci tratat cu prudență: intervalul de încredere este larg, iar aceeași procedură aplicată pe toți pacienții dă un rezultat la nivelul întâmplării.
+
+Sonda liniară evită aceste probleme și obține un AUC de 0,64 (0,53--0,74), cu intervalul de încredere peste 0,5: cuburile CT conțin un semnal histologic slab, dar real. La pragul de 0,5 modelul este prudent (sensibilitate 0,31, specificitate 0,84), iar variabilitatea între fold-uri rămâne mare (0,58--0,84). Când cubul este redus la regiunea centrală de 48~mm, semnalul dispare (AUC 0,52), ceea ce sugerează că o parte din informația utilă provine din țesutul din jurul tumorii, nu doar din tumoră; cauza (de exemplu, poziția tumorii în plămân) nu a fost încă verificată. Pentru histologie nu există încă un model de referință clinic sau radiomic, deci nu se poate spune deocamdată cât adaugă imaginea peste datele clinice.
+
+\subsubsection{Etapa 2: modelul B (CNN 2D pe setul Kaggle)}
+
+\textbf{Algoritmul.} Un ResNet-18 2D \cite{he2016} pre-antrenat pe ImageNet, cu ultimul strat înlocuit de 4 ieșiri (adenocarcinom, carcinom cu celule mari, carcinom scuamos, normal). Imaginile sunt redimensionate la $224 \times 224$ pixeli, cu augmentare prin oglindire orizontală și rotații de până la $10^\circ$. Antrenare cu AdamW (rată de învățare $10^{-4}$), entropie încrucișată, batch de 32, 25 de epoci; se păstrează modelul cu cea mai bună \textit{balanced accuracy} pe setul de validare, iar setul de test este evaluat o singură dată, la final.
+
+\textbf{Date și metodologie.} Setul Kaggle \textit{Chest CT-Scan images} \cite{kaggle_ct}, cu împărțirea originală: 613 imagini de antrenare, 72 de validare și 315 de test (în test: 120 adenocarcinom, 51 celule mari, 90 scuamos, 54 normal). Imaginile nu au identificatori de pacient, deci împărțirea nu poate fi garantată la nivel de pacient. Pentru a măsura suprapunerea dintre test și antrenare, fiecărei imagini i s-a calculat o amprentă de 256 de biți (\textit{difference hash}), iar pentru fiecare imagine de test s-a găsit cea mai apropiată imagine de antrenare din aceeași clasă și din celelalte clase. O imagine din altă clasă provine sigur de la alt pacient, deci percentila 1 a acestor distanțe (50 de biți) a fost folosită ca prag: o imagine de test mai apropiată de o imagine de antrenare din aceeași clasă este considerată, cel mai probabil, o copie.
+
+\begin{table}[h]
+\centering
+\footnotesize
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Imagini de test evaluate} & \textbf{Imagini} & \textbf{Acuratețe} & \textbf{Balanced accuracy (IÎ 95\%)} & \textbf{AUC macro (IÎ 95\%)} \\ \midrule
+Toate & 315 & 0,91 & 0,94 (0,91--0,96) & 0,99 (0,99--1,00) \\
+\textbf{Fără copiile din antrenare} & 264 & \textbf{0,90} & -- & -- \\
+Doar copiile din antrenare & 51 & 1,00 & -- & -- \\ \bottomrule
+\end{tabular}
+\caption{Modelul B pe setul de test Kaggle. Intervalele de încredere tratează imaginile ca independente și sunt, prin urmare, optimiste.}
+\label{tab:model_b}
+\end{table}
+
+\textbf{Interpretare.} Rezultatele pe setul de test complet sunt umflate de scurgerea datelor: 46 de imagini de test sunt identice octet cu octet cu imagini de antrenare, iar în total 51 (16\%) sunt copii sau aproape copii. Aproape toate sunt în clasa \textit{normal} (49 din 54), care rămâne astfel cu doar 5 imagini de test independente; în clasele tumorale au fost găsite doar 2 astfel de imagini (0 din 120 adenocarcinom, 1 din 51 celule mari, 1 din 90 scuamos), iar distanța până la cea mai apropiată imagine de antrenare din aceeași clasă este practic egală cu cea până la alte clase. Modelul clasifică corect toate copiile; fără ele, acuratețea este 0,90 pe 264 de imagini, valoarea care trebuie raportată. Verificarea găsește doar copii și imagini aproape identice: secțiuni diferite ale aceluiași pacient pot exista în continuare în ambele seturi. Rezultatul modelului B nu este comparabil cu modelul C: B clasifică imagini 2D de proveniență necunoscută, include clasa \textit{normal} (ușor de separat de cancer) și nu are separare pe pacient, în timp ce C face o singură predicție per pacient, cu validare încrucișată la nivel de pacient.
 
 \subsubsection{Tabele de rezultate (de completat pe parcurs)}
-\todo{Completați tabelele doar cu valori obținute din rulări reale (media pe fold-uri și intervalul de încredere 95\%).}
+\todo{Completați rândurile rămase doar cu valori obținute din rulări reale (AUC și intervalul de încredere 95\%).}
 
 \begin{table}[h]
 \centering
@@ -327,16 +380,16 @@ NSCLC-Radiogenomics (după ajustare) & -- & -- \\ \bottomrule
 \small
 \begin{tabular}{@{}lccc@{}}
 \toprule
-\textbf{Model} & \textbf{Histologie (bal. acc.)} & \textbf{EGFR AUC (IÎ 95\%)} & \textbf{KRAS AUC (IÎ 95\%)} \\ \midrule
-Regresie logistică clinică (model A) & n/a & 0,72 (0,62--0,81) & 0,55 (0,45--0,65) \\
+\textbf{Model} & \textbf{Histologie AUC (IÎ 95\%)} & \textbf{EGFR AUC (IÎ 95\%)} & \textbf{KRAS AUC (IÎ 95\%)} \\ \midrule
+Regresie logistică clinică (model A) & -- & 0,72 (0,62--0,81) & 0,55 (0,45--0,65) \\
 Radiomică + regresie logistică & -- & -- & -- \\
-CNN 2D (Kaggle) & -- & n/a & n/a \\
-Doar imagine (CT) & -- & -- & -- \\
+CNN 2D (Kaggle, model B) & n/a$^{*}$ & n/a & n/a \\
+Doar imagine (CT), sondă liniară (model C) & 0,64 (0,53--0,74) & -- & -- \\
 Doar imagine (CT + PET) & -- & -- & -- \\
 Late-Fusion fără multi-task & -- & -- & -- \\
 \textbf{Late-Fusion complet} & -- & -- & -- \\ \bottomrule
 \end{tabular}
-\caption{Performanța Etapei 2 și studiul de ablație (de completat).}
+\caption{Performanța Etapei 2 și studiul de ablație (de completat). Histologie: adenocarcinom vs.\ scuamos, NSCLC-Radiogenomics, validare încrucișată în 5 fold-uri. $^{*}$Modelul B rezolvă altă problemă (4 clase, imagini 2D fără identificatori de pacient); vezi Tabelul~\ref{tab:model_b}.}
 \end{table}
 
 \subsection{Analiza statistică și studii de ablație}
@@ -376,6 +429,10 @@ Date: \url{https://doi.org/10.7937/K9/TCIA.2017.7hs46erv}
 Li, P., Wang, S., Li, T., Lu, J., HuangFu, Y., Wang, D. (2020).
 \textit{A Large-Scale CT and PET/CT Dataset for Lung Cancer Diagnosis (Lung-PET-CT-Dx)} [Data set].
 The Cancer Imaging Archive. \url{https://doi.org/10.7937/TCIA.2020.NNC2-0461}
+
+\bibitem{kaggle_ct}
+\textit{Chest CT-Scan images Dataset} [Set de date]. Publicat pe Kaggle de utilizatorul \texttt{mohamedhanyyy}, licență ODbL-1.0.
+\url{https://www.kaggle.com/datasets/mohamedhanyyy/chest-ctscan-images} (accesat la 23.11.2026).
 
 \bibitem{gevaert2012}
 Gevaert, O., Xu, J., Hoang, C. D., et al. (2012).
