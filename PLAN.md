@@ -50,9 +50,9 @@ Săptămânile sunt numerotate de la **S1 = 26 oct. – 1 nov. 2026**.
 | Etapa | Termen | Aplicație | Pct. | Raport | Pct. | Stare |
 |---|---|---|---|---|---|---|
 | **1** | **Lab 2** — S1 (26 oct. – 1 nov.) | Flow-ul de bază | 10 | Funcționalitățile aplicației; descrierea plastică și formală a problemei; *related work*, instrumente și tehnologii | 5 | 🟡 Aproape gata |
-| **2** | **Lab 3** — S3 (9–15 nov.) | Algoritm inteligent + date puține | 5 | Algoritmul, metodologia experimentală, rezultate | 5 | 🟡 În lucru (modelul A gata) |
-| **3** | **Lab 4** — S5 (23–29 nov.) | Algoritm inteligent + date reale / *benchmark* | 5 | Metodologie, rezultate, **comparație cu SOTA** (cele mai bune rezultate publicate) | 5 | ⬜ |
-| **4** | **Lab 5** — S7 (7–13 dec.) | Îmbunătățirea algoritmului | 10 | Îmbunătățirile: metodologie, rezultate, analize comparative | 10 | ⬜ |
+| **2** | **Lab 3** — S3 (9–15 nov.) | Algoritm inteligent + date puține | 5 | Algoritmul, metodologia experimentală, rezultate | 5 | ✅ Gata (modelele A, B, C pe 40 de pacienți; tag `etapa-2`) |
+| **3** | **Lab 4** — S5 (23–29 nov.) | Algoritm inteligent + date reale / *benchmark* | 5 | Metodologie, rezultate, **comparație cu SOTA** (cele mai bune rezultate publicate) | 5 | 🟡 Parțial: toți pacienții NSCLC-Radiogenomics, sondă liniară, EGFR/KRAS din imagine, verificarea Kaggle, tabel SOTA; lipsesc registrarea PET, Lung-PET-CT-Dx, radiomica, histologia în aplicație |
+| **4** | **Lab 5** — S7 (7–13 dec.) | Îmbunătățirea algoritmului | 10 | Îmbunătățirile: metodologie, rezultate, analize comparative | 10 | 🟡 Parțial: 2 îmbunătățiri + ablație cu 4 variante (histologie); lipsesc CT+PET, fuziunea clinică, multi-task, U-Net pe LIDC |
 | **5** | **Lab 6** — ~S11 (4–10 ian.) | Integrarea modelului în aplicație (5) + noi îmbunătățiri (10) + **teaser video** (5) | 20 | Analiza statistică a rezultatelor (10) + slide-uri, draft (10) | 20 | ⬜ |
 | **6** | **Lab 7** — ~S13 (18–24 ian.) | **Demo cu clienți** = pitch + demo aplicație | 10 | Analiza SWOT și concluzii + slide-uri, versiune finală | 10 | ⬜ |
 | | | **Total aplicație** | **60** | **Total raport** | **55** | |
