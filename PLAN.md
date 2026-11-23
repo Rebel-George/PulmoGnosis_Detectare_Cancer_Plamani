@@ -354,7 +354,7 @@ Pentru un model nou: scrieți o clasă cu aceste două metode în `src/pulmognos
    histologia rămâne *placeholder* marcat; localizarea rămâne euristică. Teste în `tests/test_stage2.py`.
 6. 🟡 **Date pentru modelul C** — cod gata și testat (`idc.py`, `seg.py`, `build_cubes.py`); **de rulat pe server**
    (notebook, celulele 4–7): toți cei 144 de pacienți cu SEG (serverul are spațiu), cuburi doar CT, verificare vizuală.
-7. 🟡 **Modelul B** pe Kaggle — cod gata (`train_cnn2d.py`); de rulat pe server (celula 10, necesită `kaggle.json`).
+7. 🟡 **Modelul B** pe Kaggle — cod gata (`train_cnn2d.py`); de rulat pe server (celula 10, necesită o cheie API Kaggle: `~/.kaggle/access_token` sau `kaggle.json`).
 8. 🟡 **Modelul C**, **doar CT** — cod gata (`train_model3d.py`); de rulat pe server: pe 40 de pacienți (cerința
    „small data", celula 8) și pe toți (celula 9).
 9. **Raport** (secțiunea „Metodologia experimentală" + o subsecțiune „Etapa 2: rezultate pe date puține"):
@@ -601,7 +601,7 @@ laptop: cod + teste (date sintetice) ──commit + push──► GitHub ──g
 | 7 | **Verificare vizuală** (tumora în centrul fiecărui cub) | listă de pacienți problematici | 5 min |
 | 8 | Modelul C pe 40 de pacienți (cerința „small data") | `runs/model_c_histology_40/` | ~30 min |
 | 9 | Modelul C pe toți pacienții, **în fundal** (`logs/model_c_all.log`) + progres | `runs/model_c_histology_all/` | 1–3 h |
-| 10 | Kaggle (necesită `kaggle.json`) + modelul B | `runs/model_b_cnn2d/` | ~30 min |
+| 10 | Kaggle (necesită cheia API: `access_token` sau `kaggle.json`) + modelul B | `runs/model_b_cnn2d/` | ~30 min |
 | 11 | Tabelul de rezultate (formatat pentru raport) | tabel | secunde |
 | 12 | Arhiva `~/pulmognosis_rezultate_etapa2.zip` (fără date de pacient, fără greutăți) | de descărcat pe laptop | secunde |
 
