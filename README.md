@@ -312,6 +312,10 @@ streamlit run app/streamlit_app.py
 Pentru o primă încercare, alegeți **„Caz demonstrativ (fantomă sintetică)"** la pasul 1: un CT + PET
 generat artificial (plămâni, coloană, inimă și o tumoră în plămânul drept), fără date reale de pacient.
 
+Pentru un pacient real, nevăzut la antrenare: `python scripts/download_demo_cases.py` descarcă doi
+pacienți de test în `data/demo/`; încărcați folderul unuia la pasul 1. Cine preia proiectul pornește
+de la [PREDARE.md](PREDARE.md).
+
 Rularea testelor:
 
 ```bash
