@@ -220,6 +220,23 @@ Calendarul detaliat, rolurile din echipă și reperele sunt în [PLAN.md](PLAN.m
 | **5. Integrare** | Etapa 1 (3D U-Net) în aplicație → pipeline complet; validare externă; Grad-CAM; analiză statistică; video | Aplicație finală pentru un pacient nou, fără adnotări |
 | **6. Demo** | Pitch + demo live, analiza SWOT, concluzii | Prezentare finală |
 
+### Stadiul curent (după etapele 3 și 4)
+
+Trei modele antrenate pe date publice; AUC între 0,5 (întâmplare) și 1, cu interval de încredere 95%,
+validare încrucișată în 5 fold-uri la nivel de pacient. Detaliile sunt în raportul tehnic.
+
+| Model | Date | Ce prezice | Rezultat | Rol |
+|---|---|---|---|---|
+| **A** — regresie logistică pe vârstă, gen, fumat | NSCLC-Radiogenomics, 172 / 171 pacienți | EGFR, KRAS | EGFR 0,72 (0,62–0,81); KRAS 0,55 (0,45–0,65) | ramura clinică; în aplicație |
+| **B** — ResNet-18 2D (ImageNet) | Kaggle Chest CT-Scan, 1000 de imagini 2D | 4 clase | acuratețe 0,90 pe imaginile de test fără copii din antrenare | doar comparație |
+| **C** — 3D ResNet-18 MedicalNet fix + regresie logistică | NSCLC-Radiogenomics, 141 pacienți cu mască | adenocarcinom vs. scuamos | 0,64 (0,53–0,74); EGFR/KRAS din imagine ≈ 0,5 | ramura de imagine; în aplicație |
+
+Ce am aflat până acum: datele clinice sunt cel mai bun predictor pentru EGFR; imaginea CT are un semnal
+histologic slab, care depinde de țesutul din jurul tumorii și nu de pre-antrenarea rețelei; ajustarea
+fină a rețelei 3D pe ~140 de pacienți nu învață, iar trăsăturile fixe cu un model liniar sunt mai stabile;
+setul Kaggle are 16% din imaginile de test copiate din antrenare. Urmează: registrarea PET, setul
+Lung-PET-CT-Dx, fuziunea A + C și localizarea automată (U-Net pe LIDC-IDRI).
+
 ---
 
 ## 🖥️ 6. Interfața medicului (demo)
@@ -295,15 +312,23 @@ streamlit run app/streamlit_app.py
 Pentru o primă încercare, alegeți **„Caz demonstrativ (fantomă sintetică)"** la pasul 1: un CT + PET
 generat artificial (plămâni, coloană, inimă și o tumoră în plămânul drept), fără date reale de pacient.
 
+Pentru un pacient real, nevăzut la antrenare: `python scripts/download_demo_cases.py` descarcă doi
+pacienți de test în `data/demo/`; încărcați folderul unuia la pasul 1. Cine preia proiectul pornește
+de la [PREDARE.md](PREDARE.md).
+
 Rularea testelor:
 
 ```bash
 pytest
 ```
 
-> În Etapa 1 a proiectului, aplicația are flow-ul complet, dar **fără model antrenat**: localizarea
-> folosește punctul cu SUV maxim, iar panoul de rezultate afișează prevalențele din seturile de date,
-> marcate vizibil ca „DEMO".
+> Aplicația folosește acum două modele antrenate: **histologia** vine din modelul de imagine C (rulează
+> pe CPU în câteva secunde; la prima rulare descarcă automat greutățile MedicalNet, deci este nevoie de
+> internet), iar **EGFR/KRAS** din modelul clinic A. Localizarea tumorii este încă euristică (punctul cu
+> SUV maxim), ajustabilă manual. Fără `torch`/`monai`, aplicația revine la modelul clinic.
+>
+> Antrenarea se face pe GPU, pe JupyterHub-ul facultății, cu notebook-ul
+> `notebooks/etapa2_jupyterhub.ipynb` (descărcarea datelor, cuburile, modelele A, B și C, tabelul de rezultate).
 
 ---
 

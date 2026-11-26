@@ -4,7 +4,7 @@ Ghidul complet pentru terminarea proiectului: ce s-a făcut, ce urmează, cum ș
 Este scris astfel încât **o singură persoană** (eventual cu un asistent AI) să poată duce proiectul
 până la capăt doar din acest fișier și din [README.md](README.md).
 
-**Responsabil pentru etapele 2–6:** `TODO (numele colegului)`.
+**Responsabil:** proprietarul repository-ului (toate etapele; antrenarea rulează pe serverul JupyterHub al facultății, în contul propriu).
 Săptămânile sunt numerotate de la **S1 = 26 oct. – 1 nov. 2026**.
 
 > **Terminologie:** **„Etapa 1–6"** = etapele de evaluare de la laborator (Lab 2 – Lab 7).
@@ -25,6 +25,7 @@ Săptămânile sunt numerotate de la **S1 = 26 oct. – 1 nov. 2026**.
 7. [Resurse de calcul](#7-resurse-de-calcul)
 8. [Riscuri și planuri de rezervă](#8-riscuri-și-planuri-de-rezervă)
 9. [Comenzi utile](#9-comenzi-utile)
+10. [Procedura pe serverul facultății (JupyterHub)](#10-procedura-pe-serverul-facultății-jupyterhub)
 
 ---
 
@@ -49,9 +50,9 @@ Săptămânile sunt numerotate de la **S1 = 26 oct. – 1 nov. 2026**.
 | Etapa | Termen | Aplicație | Pct. | Raport | Pct. | Stare |
 |---|---|---|---|---|---|---|
 | **1** | **Lab 2** — S1 (26 oct. – 1 nov.) | Flow-ul de bază | 10 | Funcționalitățile aplicației; descrierea plastică și formală a problemei; *related work*, instrumente și tehnologii | 5 | 🟡 Aproape gata |
-| **2** | **Lab 3** — S3 (9–15 nov.) | Algoritm inteligent + date puține | 5 | Algoritmul, metodologia experimentală, rezultate | 5 | ⬜ |
-| **3** | **Lab 4** — S5 (23–29 nov.) | Algoritm inteligent + date reale / *benchmark* | 5 | Metodologie, rezultate, **comparație cu SOTA** (cele mai bune rezultate publicate) | 5 | ⬜ |
-| **4** | **Lab 5** — S7 (7–13 dec.) | Îmbunătățirea algoritmului | 10 | Îmbunătățirile: metodologie, rezultate, analize comparative | 10 | ⬜ |
+| **2** | **Lab 3** — S3 (9–15 nov.) | Algoritm inteligent + date puține | 5 | Algoritmul, metodologia experimentală, rezultate | 5 | ✅ Gata (modelele A, B, C pe 40 de pacienți; tag `etapa-2`) |
+| **3** | **Lab 4** — S5 (23–29 nov.) | Algoritm inteligent + date reale / *benchmark* | 5 | Metodologie, rezultate, **comparație cu SOTA** (cele mai bune rezultate publicate) | 5 | 🟡 Parțial: toți pacienții NSCLC-Radiogenomics, sondă liniară, EGFR/KRAS din imagine, verificarea Kaggle, tabel SOTA, modelul C în aplicație (histologie); lipsesc registrarea PET, Lung-PET-CT-Dx, radiomica |
+| **4** | **Lab 5** — S7 (7–13 dec.) | Îmbunătățirea algoritmului | 10 | Îmbunătățirile: metodologie, rezultate, analize comparative | 10 | 🟡 Parțial: 2 îmbunătățiri + ablație cu 4 variante (histologie); lipsesc CT+PET, fuziunea clinică, multi-task, U-Net pe LIDC |
 | **5** | **Lab 6** — ~S11 (4–10 ian.) | Integrarea modelului în aplicație (5) + noi îmbunătățiri (10) + **teaser video** (5) | 20 | Analiza statistică a rezultatelor (10) + slide-uri, draft (10) | 20 | ⬜ |
 | **6** | **Lab 7** — ~S13 (18–24 ian.) | **Demo cu clienți** = pitch + demo aplicație | 10 | Analiza SWOT și concluzii + slide-uri, versiune finală | 10 | ⬜ |
 | | | **Total aplicație** | **60** | **Total raport** | **55** | |
@@ -65,7 +66,9 @@ Săptămânile sunt numerotate de la **S1 = 26 oct. – 1 nov. 2026**.
 - **Pachetul `src/pulmognosis/`**: citire DICOM, conversii HU/SUV, alinierea PET pe CT, extragerea cubului
   de intrare al modelului (**128³ voxeli de 0,75 mm**), interfața `Predictor` pentru modele, o fantomă
   sintetică CT + PET scrisă ca DICOM (pentru demo și teste).
-- **21 de teste** (`pytest`).
+- **Etapa 2 (parțial):** tabelul de cohortă, fold-urile comune (`configs/splits/`), evaluarea (AUC + bootstrap) și
+  **modelul A** (regresie logistică clinică → EGFR/KRAS), integrat în aplicație (`models/clinical_lr.json`).
+- **27 de teste** (`pytest`).
 - **Raportul** (`raport_biopsie_virtuala.tex`) cu secțiunile Etapei 1 și cu tabelele de rezultate goale.
 
 ### Ce NU există în repository (se obține local)
@@ -178,10 +181,23 @@ Toate seturile sunt publice, anonimizate, pe **TCIA** (The Cancer Imaging Archiv
 - <https://www.kaggle.com/datasets/mohamedhanyyy/chest-ctscan-images> — necesită cont Kaggle.
 - Imagini 2D JPG/PNG, fără HU, **fără ID de pacient** ⇒ risc de *data leakage*. Doar baseline 2D, raportat ca atare.
 
-### 3.6 Spațiu pe disc
-Un pacient NSCLC-Radiogenomics ≈ **450 MB** (CT + PET). Strategia: descărcare **pe loturi** (ex. 10 pacienți),
-procesare, păstrarea doar a cuburilor (`float16`, ~8 MB/pacient) în `data/processed/`, ștergerea DICOM-urilor
-brute. Verificați spațiul liber înainte.
+### 3.6 Spațiu pe disc (server: 250 GB)
+Regula: **datele brute se păstrează doar unde sunt refolosite**; restul se descarcă pe loturi, se procesează și
+se șterg brutele. Toate datele stau în `~/pulmognosis_data/` (în afara repository-ului; `data/` din repository
+e o legătură simbolică spre el, creată de notebook).
+
+| Date | Mod | Spațiu |
+|---|---|---|
+| NSCLC-Radiogenomics, 144 pacienți (CT + SEG + PET + CT-ul studiului PET) | **Brut, păstrat** (refolosit în etapele 2–5) | ~60–70 GB (exact: celula 4 din notebook) |
+| Lung-PET-CT-Dx (127 GB brut) | Loturi de ~50 pacienți → cuburi → brutele șterse | ~20 GB vârf, ~3 GB păstrat |
+| LIDC-IDRI, ~150 pacienți | Re-eșantionat la 1 mm, comprimat → brutele șterse | ~20 GB vârf, ~8 GB păstrat |
+| Kaggle | Păstrat | 0,1 GB |
+| Mediu Python + PyTorch + MONAI | — | ~10 GB |
+| Cuburi, greutăți, rezultate | Păstrat | ~10–15 GB |
+| Arhiva `lungs_dataset.zip` de pe Drive (fără etichete, incompletă) | Nedezarhivată; prima care se șterge dacă e nevoie de spațiu | ~49 GB |
+| **Vârf total** | | **~170–180 GB din 250 GB** |
+
+Verificați spațiul cu `df -h ~` și `du -sh ~/pulmognosis_data/*`.
 
 ---
 
@@ -190,7 +206,7 @@ brute. Verificați spațiul liber înainte.
 ### 4.1 Mediu și repository
 - **Python 3.12**, mediu în `.venv`:
   `py -3.12 -m venv .venv` → `.venv\Scripts\pip install -r requirements.txt -e .` → `pytest`.
-- **Repository-ul nu are `.gitignore` (intenționat).** Fiecare membru pune regulile **local**, în
+- **Repository-ul nu are `.gitignore` (intenționat).** Regulile se pun **local** (pe laptop și pe server), în
   `.git/info/exclude`, înainte să creeze date:
   ```
   /data/
@@ -257,7 +273,16 @@ brute. Verificați spațiul liber înainte.
 | `src/pulmognosis/preprocessing/intensity.py` | Ferestre CT, normalizare HU, `suv_scale_factor` (cu corecția dezintegrării, tag-ul Philips, trecerea peste miezul nopții) |
 | `src/pulmognosis/preprocessing/spatial.py` | `resample_isotropic`, `resample_to_reference` (aliniere prin coordonate fizice), `resample_around` (cub centrat pe un punct în mm), `to_array` |
 | `src/pulmognosis/pipeline.py` | `prepare_case` → `Case` (CT nativ în HU, PET în SUV pe grila CT și pe grila proprie); `extract_model_patch` → cubul 128³ CT și PET; `ClinicalData`; constantele cubului |
-| `src/pulmognosis/inference.py` | Protocolul **`Predictor`** (`localise`, `predict`), `Localisation`, `Prediction`, `PlaceholderPredictor` |
+| `src/pulmognosis/inference.py` | Protocolul **`Predictor`** (`localise`, `predict`), `Localisation`, `Prediction` (cu sursa fiecărei ieșiri și lista celor încă *placeholder*), `PlaceholderPredictor`, `ClinicalPredictor` (modelul A) |
+| `src/pulmognosis/data/cohort.py`, `scripts/build_cohort.py` | Tabelul de cohortă NSCLC-Radiogenomics → `data/cohort/nsclc_radiogenomics.csv` |
+| `src/pulmognosis/evaluation/` | `splits.py` (fold-uri stratificate EGFR×KRAS, salvate în `configs/splits/`), `metrics.py` (AUC, F1, sens./spec., IÎ bootstrap) |
+| `src/pulmognosis/classification/clinical.py`, `scripts/train_clinical.py` | Modelul A: validare încrucișată, export JSON în `models/clinical_lr.json`, rezultate în `runs/model_a_clinical/` |
+| `src/pulmognosis/data/idc.py` | Selecția și descărcarea din IDC (`idc-index`): doar seriile necesare, raport de dimensiune |
+| `src/pulmognosis/data/seg.py` | Citirea măștilor DICOM SEG: CT-ul de referință, centrul și extinderea tumorii în mm |
+| `scripts/build_cubes.py` | Pacient → SEG → CT → cub 128³ (doar CT în Etapa 2) → `.npz` + `build_log.csv` |
+| `src/pulmognosis/classification/model3d.py`, `dataset.py`, `scripts/train_model3d.py` | Modelul C: 3D ResNet-18 (MedicalNet), validare încrucișată cu oprire timpurie, model final |
+| `scripts/train_cnn2d.py` | Modelul B: ResNet-18 2D (ImageNet) pe Kaggle |
+| `notebooks/etapa2_jupyterhub.ipynb` | Procedura Etapei 2 pe server (secțiunea 10) |
 | `app/streamlit_app.py`, `app/rendering.py` | Aplicația; vorbește cu modelele **doar** prin `get_predictor()` |
 | `tests/` | Teste pentru intensități, geometrie, serii DICOM, pipeline-ul complet pe fantomă |
 
@@ -265,14 +290,12 @@ brute. Verificați spațiul liber înainte.
 
 | Modul | Conținut | Etapa |
 |---|---|---|
-| `src/pulmognosis/data/cohort.py` + `scripts/build_cohort.py` | Tabelul de cohortă (CSV în `data/`): pacient × modalități × etichete | 2 |
-| `src/pulmognosis/data/download.py` + `scripts/download_batch.py` | Descărcare selectivă (`idc-index`) pe loturi | 2 |
-| `src/pulmognosis/data/seg.py` | Citirea DICOM SEG (ex. `highdicom`) → mască 3D → centrul tumorii în mm | 2 |
+| `scripts/download_batch.py` | Descărcare pe loturi cu ștergerea brutelor (Lung-PET-CT-Dx, LIDC) | 3–4 |
 | `src/pulmognosis/preprocessing/registration.py` | Registrarea CT (studiul PET) → CT diagnostic; aplicarea transformării pe PET | 3 |
 | `src/pulmognosis/data/lung_pet_ct_dx.py` | Casetele PASCAL VOC → caseta 3D → centrul tumorii | 3 |
-| `scripts/build_cubes.py` | Pacient → `data/processed/<set>/<pacient>.npz` cu `ct` (float16, HU), `pet` (float16, SUV sau lipsă), `center_mm`, `spacing_mm` | 2–3 |
-| `src/pulmognosis/evaluation/` | `splits.py` (fold-uri), `metrics.py` (AUC, F1, sens./spec.), `bootstrap.py` (IÎ), `delong.py` (test DeLong), `report.py` (tabele LaTeX) | 2, 5 |
-| `src/pulmognosis/classification/` | `clinical.py` (model A), `cnn2d.py` (model B), `model3d.py` (3D ResNet-18 + MLP + capete), `dataset.py` (citirea cuburilor + augmentări), `train.py` | 2–4 |
+| Canalul PET în `scripts/build_cubes.py` | După registrare: `pet` (float16, SUV) în același `.npz` | 3 |
+| `src/pulmognosis/evaluation/` | `delong.py` (test DeLong), `report.py` (tabele LaTeX) | 5 |
+| `src/pulmognosis/classification/` | MLP clinic + fuziune târzie + capete multi-task în `model3d.py`; pierdere mascată | 4 |
 | `src/pulmognosis/segmentation/` | U-Net 3D (antrenare, inferență cu fereastră glisantă) | 4–5 |
 | `src/pulmognosis/explain.py` | Grad-CAM pe clasificator | 5 |
 | `configs/` | YAML pentru experimente + `configs/splits/*.csv` | 2+ |
@@ -319,19 +342,21 @@ Pentru un model nou: scrieți o clasă cu aceste două metode în `src/pulmognos
 | **C** | 3D ResNet-18 (MedicalNet) pe cubul 128³ | **~40 de pacienți** NSCLC-Radiogenomics cu SEG, aleși stratificat după histologie | Adenocarcinom vs. scuamos | ❌ (doar raport) |
 
 **Sarcini, în ordine:**
-1. Mediul, `.git/info/exclude`, metadatele în `data/metadata/` (secțiunile 3.2, 3.3, 4.1).
-2. **Cohorta** (`build_cohort.py`): verificați că obțineți cifrele din secțiunea 3.2 (211 / 144 / 43 din 172).
-3. **Evaluarea** (`evaluation/`): fold-uri stratificate pe pacient, salvate în `configs/splits/`; AUC + bootstrap; metrici.
-4. **Modelul A**: standardizare în interiorul *pipeline*-ului de validare; coeficienții salvați ca JSON mic
-   (pot fi în git — nu sunt date de pacient). Rezultate pe 5 fold-uri cu IÎ.
-5. **Modelul A în aplicație**: clasă nouă `Predictor` — EGFR/KRAS reale, etichetate „model clinic (regresie
-   logistică), antrenat pe N pacienți"; histologia rămâne *placeholder* marcat; localizarea rămâne euristică.
-   Teste pentru noua clasă.
-6. **Date pentru modelul C**: descărcare pe loturi de 10 a ~40 de pacienți (CT diagnostic + SEG; PET-ul doar
-   dacă rămâne timp — vezi Capcana 1); masca SEG → centrul tumorii în mm → `extract_model_patch` → `.npz`;
-   notebook de verificare vizuală (tumora e în centrul fiecărui cub).
-7. **Modelul B** pe Kaggle (cu limitările scrise explicit).
-8. **Modelul C**, **doar CT** (PET-ul aliniat corect vine în Etapa 3): precizie mixtă, batch 4, aceleași fold-uri.
+1. ✅ Mediul, `.git/info/exclude`, metadatele în `data/metadata/` (secțiunile 3.2, 3.3, 4.1).
+2. ✅ **Cohorta** (`python scripts/build_cohort.py`): cifrele din secțiunea 3.2 sunt reproduse exact.
+3. ✅ **Evaluarea** (`evaluation/`): fold-uri stratificate pe pacient (EGFR×KRAS), `configs/splits/nsclc_radiogenomics_5fold.csv`
+   (în git; **nu le regenerați** — toate modelele folosesc aceleași fold-uri); AUC + bootstrap; metrici.
+4. ✅ **Modelul A** (`python scripts/train_clinical.py`): regresie logistică **neponderată** (ieșirea e o
+   probabilitate reală, afișată ca atare în aplicație); pragul de decizie = proporția de mutanți din fold-ul de
+   antrenare. **Rezultate:** EGFR AUC **0,72 (IÎ 95% 0,62–0,81)**, 172 pacienți / 43 mutanți;
+   KRAS AUC **0,55 (0,45–0,65)**, 171 / 38 — KRAS nu e mai bun decât întâmplarea din date clinice.
+5. ✅ **Modelul A în aplicație**: `ClinicalPredictor` — EGFR/KRAS reale, fiecare cu sursa și AUC-ul afișate;
+   histologia rămâne *placeholder* marcat; localizarea rămâne euristică. Teste în `tests/test_stage2.py`.
+6. 🟡 **Date pentru modelul C** — cod gata și testat (`idc.py`, `seg.py`, `build_cubes.py`); **de rulat pe server**
+   (notebook, celulele 4–7): toți cei 144 de pacienți cu SEG (serverul are spațiu), cuburi doar CT, verificare vizuală.
+7. 🟡 **Modelul B** pe Kaggle — cod gata (`train_cnn2d.py`); de rulat pe server (celula 10, necesită o cheie API Kaggle: `~/.kaggle/access_token` sau `kaggle.json`).
+8. 🟡 **Modelul C**, **doar CT** — cod gata (`train_model3d.py`); de rulat pe server: pe 40 de pacienți (cerința
+   „small data", celula 8) și pe toți (celula 9).
 9. **Raport** (secțiunea „Metodologia experimentală" + o subsecțiune „Etapa 2: rezultate pe date puține"):
    descrierea algoritmilor A, B, C, a datelor, a fold-urilor și a metricilor; tabelul de rezultate cu IÎ și
    numărul de pacienți/pozitivi.
@@ -344,10 +369,10 @@ Pentru un model nou: scrieți o clasă cu aceste două metode în `src/pulmognos
 **Așteptări:** modelul C va fi slab, cu IÎ largi — normal pentru „small data". Comparația importantă: imaginile vs. modelul A.
 
 **Gata când:**
-- [ ] 3 modele antrenate, cu rezultate reale (IÎ 95%, nr. pacienți și pozitivi);
-- [ ] aplicația afișează predicția reală a modelului A, alături de *placeholder*-ele marcate;
-- [ ] raportul descrie algoritmii, metodologia și rezultatele;
-- [ ] tag `etapa-2`.
+- [x] 3 modele antrenate, cu rezultate reale (IÎ 95%, nr. pacienți și pozitivi);
+- [x] aplicația afișează predicția reală a modelului A, alături de *placeholder*-ele marcate;
+- [x] raportul descrie algoritmii, metodologia și rezultatele;
+- [x] tag `etapa-2`.
 
 ---
 
@@ -381,10 +406,10 @@ baseline-urile și cu literatura; histologia reală intră în aplicație.
 
 **Gata când:**
 - [ ] PET aliniat și verificat vizual; numărul de eșecuri raportat;
-- [ ] rezultate pe seturile complete, cu IÎ;
-- [ ] tabel: modelul nostru vs. baseline-uri (clinic, radiomic, 2D) vs. lucrări publicate;
-- [ ] aplicația folosește clasificatorul real pentru histologie;
-- [ ] tag `etapa-3`.
+- [x] rezultate pe seturile complete, cu IÎ (NSCLC-Radiogenomics; Lung-PET-CT-Dx încă lipsește);
+- [x] tabel: modelul nostru vs. baseline-uri (clinic, 2D) vs. lucrări publicate (baseline-ul radiomic lipsește);
+- [x] aplicația folosește clasificatorul real pentru histologie (modelul C, sondă liniară);
+- [x] tag `etapa-3`.
 
 ---
 
@@ -417,7 +442,7 @@ grafice (curbe ROC, AUC per variantă cu IÎ).
 - [ ] cel puțin 3 îmbunătățiri măsurate față de referință, în tabelul de ablație, cu IÎ;
 - [ ] cea mai bună configurație aleasă pe baza fold-urilor (nu a unui set de test privit de mai multe ori);
 - [ ] U-Net antrenat pe LIDC, cu Dice raportat;
-- [ ] tag `etapa-4`.
+- [x] tag `etapa-4` (parțial: 2 îmbunătățiri + ablație cu 4 variante; U-Net încă nefăcut).
 
 ---
 
@@ -493,12 +518,11 @@ E1  │ Etapa 2 │ Etapa 3 │ Etapa 4 │ Etapa 5 (vacanța) │ Etapa 6
 
 | Resursă | Folosire |
 |---|---|
-| GPU local (ex. RTX 3060, 6 GB) | Preprocesare, clasificatorul (cuburi 128³: batch 4–8 cu precizie mixtă), teste U-Net, aplicația |
-| Google Colab / Kaggle Notebooks (GPU gratuit) | U-Net pe LIDC dacă memoria nu ajunge; rulări paralele ale fold-urilor |
-| Disc | Descărcare pe loturi; se păstrează doar cuburile (~8 MB/pacient) |
-| Server GPU al facultății | `TODO`: de întrebat coordonatorul |
+| **JupyterHub al facultății** (GPU ≥ 16 GB, 250 GB disc, acces la internet) | **Toată descărcarea și antrenarea** (notebook-uri în `notebooks/`) |
+| Laptop (ex. RTX 3060, 6 GB) | Scrierea și testarea codului (pe fantoma sintetică), aplicația, modelul A |
+| Google Colab / Kaggle Notebooks | Rezervă, dacă serverul nu e disponibil |
 
-**Pentru 6 GB VRAM:** precizie mixtă (`torch.autocast`), batch mic, *gradient accumulation*, patch-uri 96³ pentru U-Net.
+Antrenarea **nu** se rulează pe laptop: codul se testează local doar pe date sintetice, apoi rulează pe server.
 
 ---
 
@@ -536,3 +560,68 @@ git status --ignored
 git tag etapa-2
 git push origin etapa-2
 ```
+
+---
+
+## 10. Procedura pe serverul facultății (JupyterHub)
+
+Toate pașii grei (descărcare, antrenare) rulează pe JupyterHub, din notebook-ul
+[`notebooks/etapa2_jupyterhub.ipynb`](notebooks/etapa2_jupyterhub.ipynb). Laptopul servește la scrierea codului
+și la aplicație. Fluxul de lucru:
+
+```
+laptop: cod + teste (date sintetice) ──commit + push──► GitHub ──git pull──► JupyterHub: date + antrenare
+   ▲                                                                              │
+   └────────── arhiva de rezultate (metrici, predicții, jurnale) ◄────────────────┘
+```
+
+### 10.1 Prima dată pe server
+1. Pe laptop: `git push` (ramura de lucru, ex. `feature/etapa-2`).
+2. În JupyterHub: *File → New → Terminal*, apoi:
+   ```bash
+   git clone https://github.com/Rebel-George/PulmoGnosis_Detectare_Cancer_Plamani.git
+   cd PulmoGnosis_Detectare_Cancer_Plamani && git checkout feature/etapa-2
+   ```
+3. Deschideți `notebooks/etapa2_jupyterhub.ipynb`, **alegeți kernel-ul `venv`** (dreapta-sus în bara notebook-ului
+   sau *Kernel → Change Kernel…*) și rulați celulele **în ordine**. Kernel-ul implicit „Python 3 (ipykernel)"
+   folosește Python-ul sistemului, care refuză instalarea de pachete (*externally-managed-environment*).
+   Dacă meniul *File → New* nu oferă *Terminal*, comenzile shell se rulează dintr-o celulă cu `!` în față.
+
+### 10.2 Ce face notebook-ul (Etapa 2)
+
+| Celula | Ce face | Rezultat | Durată |
+|---|---|---|---|
+| 0 | Căi, GPU, spațiu, legătura `data/` → `~/pulmognosis_data/` | — | secunde |
+| 1 | Instalează pachetele (`requirements-train.txt`; PyTorch doar dacă lipsește) | mediu gata | 5–10 min |
+| 2 | Reguli git locale (`.git/info/exclude`) | datele nu pot ajunge în git | secunde |
+| 3 | Metadate + cohortă + modelul A | aceleași cifre ca în §3.2 și Etapa 2 | 1 min |
+| 4 | Selecția IDC (**doar afișează dimensiunea**) | 144 pacienți, ~60–70 GB | 1 min |
+| 5 | Descărcarea, **în fundal** (`logs/download.log`) + celulă de progres | `~/pulmognosis_data/raw/nsclc_radiogenomics/` | câteva ore |
+| 6 | Cuburile 128³ din măștile SEG | `~/pulmognosis_data/processed/nsclc_radiogenomics/*.npz` + `build_log.csv` | 30–60 min |
+| 7 | **Verificare vizuală** (tumora în centrul fiecărui cub) | listă de pacienți problematici | 5 min |
+| 8 | Modelul C pe 40 de pacienți (cerința „small data") | `runs/model_c_histology_40/` | ~30 min |
+| 9 | Modelul C pe toți pacienții, **în fundal** (`logs/model_c_all.log`) + progres | `runs/model_c_histology_all/` | 1–3 h |
+| 10 | Kaggle (necesită cheia API: `access_token` sau `kaggle.json`) + modelul B | `runs/model_b_cnn2d/` | ~30 min |
+| 11 | Tabelul de rezultate (formatat pentru raport) | tabel | secunde |
+| 12 | Arhiva `~/pulmognosis_rezultate_etapa2.zip` (fără date de pacient, fără greutăți) | de descărcat pe laptop | secunde |
+
+Fiecare rulare de antrenare salvează în `runs/<nume>/`: `metrics.json` (AUC cu IÎ, F1, sens./spec., numărul de
+pacienți/pozitivi pe fold), `oof.csv` (predicțiile *out-of-fold*), `history.json`, `config.json` și
+`final_model.pt` (modelul final, antrenat pe toți pacienții; rămâne pe server).
+
+### 10.3 După rulare
+1. Descărcați `~/pulmognosis_rezultate_etapa2.zip` (browserul de fișiere JupyterHub → click dreapta → *Download*).
+2. Pe laptop: copiați cifrele din tabelul de la celula 11 în raport (secțiunea „Etapa 2: rezultate pe date puține")
+   și bifați „Gata când" din Etapa 2.
+3. Dacă un pas eșuează: jurnalul din `logs/` și eroarea din celulă spun de ce; pacienții eșuați la cuburi sunt în
+   `build_log.csv` (coloana `error`).
+
+### 10.4 Reguli pe server
+- Datele stau doar în `~/pulmognosis_data/`; **nu se pun în git** (regulile din celula 2).
+- **Nu se modifică pe server** codul din `src/` sau `scripts/`: modificările se fac pe laptop, se testează, se
+  publică și se aduc pe server cu `git pull` (altfel versiunile se despart).
+- Fold-urile (`configs/splits/`) **nu se regenerează** — toate modelele le folosesc pe aceleași.
+- Spațiul se verifică după fiecare descărcare (`df -h ~`). Discul `/bigdata` e **comun tuturor studenților**
+  (fără cotă personală), deci spațiul liber se poate micșora între rulări.
+- Notebook-ul de pe server își salvează rezultatele în fișier; înainte de `git pull` pe server rulați
+  `git checkout -- notebooks/` (rezultatele importante sunt deja în `runs/` și `logs/`).

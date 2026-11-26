@@ -2,7 +2,9 @@
 
 Used by the tests and by the app's demo button, so the full flow can be
 exercised without downloading patient data. The phantom is a simplified
-chest: body, two lungs, spine, heart, and one tumour in the right lung.
+chest: body, two lungs, spine, heart, and one tumour in the right lung. A
+DICOM SEG with the tumour mask is written too, laid out like the masks in
+NSCLC-Radiogenomics (one binary frame per CT slice, referencing the CT series).
 
 `DEMO` matches a typical chest PET/CT (512×512 CT at ~0.7 mm, 1.25 mm slices;
 4 mm PET); `TEST` is a small, fast version with the same anatomy.
@@ -16,7 +18,14 @@ from typing import Callable
 
 import numpy as np
 from pydicom.dataset import Dataset, FileMetaDataset
-from pydicom.uid import CTImageStorage, ExplicitVRLittleEndian, PositronEmissionTomographyImageStorage, generate_uid
+from pydicom.pixels import pack_bits
+from pydicom.uid import (
+    CTImageStorage,
+    ExplicitVRLittleEndian,
+    PositronEmissionTomographyImageStorage,
+    SegmentationStorage,
+    generate_uid,
+)
 
 PATIENT_WEIGHT_KG = 70.0
 INJECTED_DOSE_BQ = 300e6
@@ -107,7 +116,8 @@ def _write_series(
     common: dict,
     slope: float,
     intercept: float,
-):
+) -> str:
+    """Write one series slice by slice; returns its SeriesInstanceUID."""
     out_dir.mkdir(parents=True, exist_ok=True)
     sop_class = CTImageStorage if modality == "CT" else PositronEmissionTomographyImageStorage
     series_uid = generate_uid()
@@ -157,10 +167,72 @@ def _write_series(
             ds.RadiopharmaceuticalInformationSequence = [radio]
         ds.PixelData = stored.tobytes()
         ds.save_as(out_dir / f"{modality}_{k + 1:04d}.dcm", enforce_file_format=True)
+    return series_uid
 
 
-def write_demo_case(root: str | Path, spec: PhantomSpec = DEMO, seed: int = 0) -> Path:
-    """Write the phantom's CT and PET series under `root` and return it."""
+def _write_seg(path: Path, spec: PhantomSpec, ct_series_uid: str, common: dict) -> None:
+    """Binary tumour mask on the CT grid as a multi-frame DICOM SEG (only slices that contain tumour)."""
+    nz, ny, nx = spec.ct_shape_zyx
+    sz, sy, sx = spec.ct_spacing_zyx
+    ox, oy, oz = _origin(spec.ct_shape_zyx, spec.ct_spacing_zyx)
+    frames, per_frame = [], []
+    for k in range(nz):
+        mask = _slice_labels(spec.ct_shape_zyx, spec.ct_spacing_zyx, k)["tumour"]
+        if not mask.any():
+            continue
+        frames.append(mask.astype(np.uint8))
+        position, segment = Dataset(), Dataset()
+        position.ImagePositionPatient = [ox, oy, oz + k * sz]
+        segment.ReferencedSegmentNumber = 1
+        frame = Dataset()
+        frame.PlanePositionSequence = [position]
+        frame.SegmentIdentificationSequence = [segment]
+        per_frame.append(frame)
+
+    sop_uid = generate_uid()
+    meta = FileMetaDataset()
+    meta.MediaStorageSOPClassUID = SegmentationStorage
+    meta.MediaStorageSOPInstanceUID = sop_uid
+    meta.TransferSyntaxUID = ExplicitVRLittleEndian
+
+    ds = Dataset()
+    ds.file_meta = meta
+    for key, value in common.items():
+        setattr(ds, key, value)
+    ds.SOPClassUID = SegmentationStorage
+    ds.SOPInstanceUID = sop_uid
+    ds.SeriesInstanceUID = generate_uid()
+    ds.Modality = "SEG"
+    ds.SeriesDescription = "Fantomă sintetică SEG"
+    ds.SegmentationType = "BINARY"
+    referenced = Dataset()
+    referenced.SeriesInstanceUID = ct_series_uid
+    ds.ReferencedSeriesSequence = [referenced]
+
+    orientation, measures = Dataset(), Dataset()
+    orientation.ImageOrientationPatient = [1, 0, 0, 0, 1, 0]
+    measures.PixelSpacing = [sy, sx]
+    measures.SliceThickness = sz
+    shared = Dataset()
+    shared.PlaneOrientationSequence = [orientation]
+    shared.PixelMeasuresSequence = [measures]
+    ds.SharedFunctionalGroupsSequence = [shared]
+    ds.PerFrameFunctionalGroupsSequence = per_frame
+
+    ds.NumberOfFrames = len(frames)
+    ds.Rows, ds.Columns = ny, nx
+    ds.SamplesPerPixel = 1
+    ds.PhotometricInterpretation = "MONOCHROME2"
+    ds.BitsAllocated = ds.BitsStored = 1
+    ds.HighBit = 0
+    ds.PixelRepresentation = 0
+    ds.PixelData = pack_bits(np.stack(frames))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    ds.save_as(path, enforce_file_format=True)
+
+
+def write_demo_case(root: str | Path, spec: PhantomSpec = DEMO, seed: int = 0, with_seg: bool = True) -> Path:
+    """Write the phantom's CT and PET series (and the tumour SEG) under `root` and return it."""
     root = Path(root)
     common = {
         "SpecificCharacterSet": "ISO_IR 192",  # UTF-8, for Romanian diacritics
@@ -174,8 +246,10 @@ def write_demo_case(root: str | Path, spec: PhantomSpec = DEMO, seed: int = 0) -
         "StudyDescription": "Fantomă sintetică PulmoGnosis",
     }
     rng = np.random.default_rng(seed)
-    _write_series(root / "CT", spec.ct_shape_zyx, spec.ct_spacing_zyx, lambda k: ct_slice_hu(spec, k, rng),
-                  "CT", common, slope=1.0, intercept=-1024.0)
+    ct_uid = _write_series(root / "CT", spec.ct_shape_zyx, spec.ct_spacing_zyx, lambda k: ct_slice_hu(spec, k, rng),
+                           "CT", common, slope=1.0, intercept=-1024.0)
+    if with_seg:
+        _write_seg(root / "SEG" / "SEG_0001.dcm", spec, ct_uid, common)
 
     bq_per_suv = _decayed_dose() / (PATIENT_WEIGHT_KG * 1000.0)
     slope = TUMOUR_SUV * bq_per_suv / 30000.0

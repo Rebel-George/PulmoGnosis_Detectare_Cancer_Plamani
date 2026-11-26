@@ -18,7 +18,8 @@ import streamlit as st
 
 from pulmognosis.data.dicom import SeriesInfo, pick_series, scan_folder
 from pulmognosis.data.synthetic import write_demo_case
-from pulmognosis.inference import PlaceholderPredictor, Predictor
+from pulmognosis.inference import (ClinicalPredictor, HistologyProbe, ImagePredictor, PlaceholderPredictor, Predictor,
+                                   seg_localisation)
 from pulmognosis.pipeline import (
     MODEL_PATCH_MM,
     MODEL_PATCH_SIZE,
@@ -41,21 +42,40 @@ STEPS = (
     "5 · Rezultate",
 )
 WINDOW_LABELS = {"Plămân": WINDOWS["lung"], "Mediastin": WINDOWS["mediastinum"]}
+CLINICAL_MODEL = Path(__file__).resolve().parents[1] / "models" / "clinical_lr.json"
+HISTOLOGY_MODEL = Path(__file__).resolve().parents[1] / "models" / "histology_probe.json"
 
 st.set_page_config(page_title="PulmoGnosis", page_icon="🫁", layout="wide")
 
 
 # ---------------------------------------------------------------- state ----
 
+def _torch_available() -> bool:
+    try:
+        import monai  # noqa: F401
+        import torch  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+@st.cache_resource
 def get_predictor() -> Predictor:
-    # Replaced by the trained Stage 1 + Stage 2 models in a later stage.
+    # Model A (clinical) + Model C (image, histology) when both are exported and torch is installed;
+    # Model A alone otherwise; the placeholder when nothing is exported.
+    if CLINICAL_MODEL.exists():
+        clinical = ClinicalPredictor.from_file(CLINICAL_MODEL)
+        if HISTOLOGY_MODEL.exists() and _torch_available():
+            return ImagePredictor(clinical.model, HistologyProbe.from_file(HISTOLOGY_MODEL))
+        return clinical
     return PlaceholderPredictor()
 
 
 def reset_from(step: str) -> None:
     """Clear everything computed at or after `step`, so stale results never show."""
     keys = {
-        "case": ["case", "ct", "pet", "dicom_header", "clinical", "location", "patch_cache"],
+        "case": ["case", "ct", "pet", "dicom_header", "clinical", "location", "patch_cache",
+                 "prediction", "prediction_key", "seg_location"],
         "clinical": ["clinical"],
         "location": ["location"],
     }[step]
@@ -164,6 +184,8 @@ def step_upload() -> None:
         st.session_state.ct = to_array(case.ct)
         st.session_state.pet = to_array(case.pet) if case.has_pet else None
         st.session_state.dicom_header = pydicom.dcmread(ct.files[0], stop_before_pixels=True)
+        with st.spinner("Se caută o mască tumorală (SEG) pentru acest CT…"):
+            st.session_state.seg_location = seg_localisation(folder, ct.uid, case)
 
     if "case" in st.session_state:
         case = st.session_state.case
@@ -172,6 +194,8 @@ def step_upload() -> None:
         st.success(
             f"Caz pregătit: CT {x}×{y}×{z} voxeli la rezoluția originală ({sx:.2f} × {sy:.2f} × {sz:.2f} mm), "
             + ("cu PET aliniat." if case.has_pet else "fără PET.")
+            + (" Mască tumorală (SEG) găsită: pasul 4 pornește din centrul ei."
+               if st.session_state.get("seg_location") else "")
             + " Continuați cu pasul 2."
         )
         if case.pet_warning:
@@ -247,7 +271,7 @@ def step_localise() -> None:
     predictor = get_predictor()
 
     if "location" not in st.session_state:
-        st.session_state.location = predictor.localise(st.session_state.case)
+        st.session_state.location = st.session_state.get("seg_location") or predictor.localise(st.session_state.case)
     loc = st.session_state.location
 
     st.write(
@@ -292,21 +316,38 @@ def bar_row(label: str, value: float) -> None:
 def step_results() -> None:
     st.header("5 · Rezultate")
     predictor = get_predictor()
-    prediction = predictor.predict(st.session_state.case, st.session_state.location, st.session_state.clinical)
+    # The image model takes a few seconds on CPU: compute once per (centre, clinical data), not on every rerun.
+    key = (tuple(st.session_state.location.center_zyx), st.session_state.clinical)
+    if st.session_state.get("prediction_key") != key:
+        with st.spinner("Se rulează modelele (prima rulare descarcă greutățile MedicalNet)…"):
+            st.session_state.prediction = predictor.predict(st.session_state.case, st.session_state.location,
+                                                            st.session_state.clinical)
+        st.session_state.prediction_key = key
+    prediction = st.session_state.prediction
 
     if prediction.is_placeholder:
         st.error("**DEMO – fără model antrenat.** " + prediction.note, icon="⚠️")
+    else:
+        st.info(prediction.note, icon="ℹ️")
 
+    placeholder = prediction.placeholder_outputs
     left, right = st.columns(2)
     with left:
         st.subheader("Tip histologic")
+        if "histology" in placeholder:
+            st.warning("**DEMO** – valori de referință, identice pentru toți pacienții.", icon="⚠️")
         for name, p in sorted(prediction.histology.items(), key=lambda kv: -kv[1]):
             bar_row(name.capitalize(), p)
+        st.caption(f"Sursa: {prediction.sources.get('histology', '—')}")
     with right:
         st.subheader("Mutații")
+        if {"egfr", "kras"} & placeholder:
+            st.warning("**DEMO** – valori de referință, identice pentru toți pacienții.", icon="⚠️")
         m1, m2 = st.columns(2)
         m1.metric("EGFR mutant", f"{prediction.egfr:.0%}")
         m2.metric("KRAS mutant", f"{prediction.kras:.0%}")
+        st.caption(f"EGFR — sursa: {prediction.sources.get('egfr', '—')}")
+        st.caption(f"KRAS — sursa: {prediction.sources.get('kras', '—')}")
         st.caption("EGFR: candidat pentru terapie țintită cu inhibitori de tirozin-kinază. KRAS: candidat pentru inhibitori KRAS.")
 
     st.subheader("Hartă de atenție (Grad-CAM)")
@@ -341,7 +382,11 @@ with st.sidebar:
     st.divider()
     progress = st.container()
     st.divider()
-    st.caption("Versiune demonstrativă (Etapa 1): flow-ul complet, fără model antrenat.")
+    if isinstance(get_predictor(), ImagePredictor):
+        st.caption("Versiune de lucru: histologia din modelul de imagine C, EGFR/KRAS din modelul clinic A; "
+                   "localizarea tumorii este încă euristică.")
+    else:
+        st.caption("Versiune de lucru: EGFR/KRAS din modelul clinic; restul ieșirilor sunt încă demonstrative.")
 
 step_index = STEPS.index(step)
 missing = requirements_met(step_index)
